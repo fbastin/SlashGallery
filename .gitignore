@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# AI Models (large files)
+models/*.pth
+models/*.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
