@@ -15,11 +15,17 @@ class SlashGallery {
             'photo_base_dir' => '',
             'python_venv' => '',
             'backend_dir' => __DIR__ . '/../backend',
-            'base_url' => '/photos/'
+            'base_url' => '/photos/',
+            'labels_path' => __DIR__ . '/../imagenet_classes.txt',
+            'models_dir' => __DIR__ . '/../models'
         ], $config);
 
         $this->pythonVenv = $this->config['python_venv'] . '/bin/python';
         $this->backendDir = $this->config['backend_dir'];
+        
+        if (!is_dir($this->config['models_dir'])) {
+            mkdir($this->config['models_dir'], 0755, true);
+        }
     }
 
     private function runPython($script, $action, ...$args) {
@@ -70,11 +76,23 @@ class SlashGallery {
     }
 
     public function aiTagImage($filePath) {
-        return $this->runPython('auto_tagger.py', 'tag_image', $filePath);
+        return $this->runPython('auto_tagger.py', 'tag_image', 
+            $this->config['db_path'], 
+            $this->config['photo_base_dir'], 
+            $this->config['labels_path'], 
+            $this->config['models_dir'], 
+            $filePath
+        );
     }
 
     public function aiTagAlbum($albumPath) {
-        return $this->runPython('auto_tagger.py', 'tag_album', $albumPath);
+        return $this->runPython('auto_tagger.py', 'tag_album', 
+            $this->config['db_path'], 
+            $this->config['photo_base_dir'], 
+            $this->config['labels_path'], 
+            $this->config['models_dir'], 
+            $albumPath
+        );
     }
 
     public function fineTune() {
