@@ -8,6 +8,8 @@ class SlashGallery {
     private $config;
     private $pythonVenv;
     private $backendDir;
+    private $isAdmin = false;
+    private $userTag = null;
 
     public function __construct($config) {
         $this->config = array_merge([
@@ -28,9 +30,21 @@ class SlashGallery {
         }
     }
 
+    public function setSecurityContext($isAdmin, $userTag = null) {
+        $this->isAdmin = $isAdmin;
+        $this->userTag = $userTag;
+    }
+
     private function runPython($script, $action, ...$args) {
         $scriptPath = $this->backendDir . '/' . $script;
         $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($action);
+        
+        // Always pass security context as first two args to api.py
+        $cmd .= " " . escapeshellarg($this->config['db_path']);
+        $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
+        $cmd .= " " . escapeshellarg($this->isAdmin ? 'true' : 'false');
+        $cmd .= " " . escapeshellarg($this->userTag ?? 'null');
+
         foreach ($args as $arg) {
             $cmd .= " " . escapeshellarg($arg);
         }
@@ -40,62 +54,82 @@ class SlashGallery {
     }
 
     public function getTimeline() {
-        return $this->runPython('api.py', 'get_summarized_timeline', $this->config['db_path'], $this->config['photo_base_dir']);
+        return $this->runPython('api.py', 'get_summarized_timeline');
     }
 
     public function getPhotosByDate($date) {
-        return $this->runPython('api.py', 'get_photos_by_date', $this->config['db_path'], $this->config['photo_base_dir'], $date);
+        return $this->runPython('api.py', 'get_photos_by_date', $date);
     }
 
     public function getGeolocated() {
-        return $this->runPython('api.py', 'get_geolocated', $this->config['db_path'], $this->config['photo_base_dir']);
+        return $this->runPython('api.py', 'get_geolocated');
     }
 
     public function search($query) {
-        return $this->runPython('api.py', 'search', $this->config['db_path'], $this->config['photo_base_dir'], $query);
+        return $this->runPython('api.py', 'search', $query);
+    }
+
+    public function getAllImages() {
+        return $this->runPython('api.py', 'get_all_images');
     }
 
     public function getAllTags() {
-        return $this->runPython('api.py', 'get_all_tags', $this->config['db_path'], $this->config['photo_base_dir']);
+        return $this->runPython('api.py', 'get_all_tags');
     }
 
     public function getBatchMetadata($filePaths) {
-        return $this->runPython('api.py', 'get_batch_metadata', $this->config['db_path'], $this->config['photo_base_dir'], json_encode($filePaths));
+        return $this->runPython('api.py', 'get_batch_metadata', json_encode($filePaths));
     }
 
     public function addTag($filePath, $tag) {
-        return $this->runPython('api.py', 'add_tag', $this->config['db_path'], $this->config['photo_base_dir'], $filePath, $tag);
+        return $this->runPython('api.py', 'add_tag', $filePath, $tag);
     }
 
     public function deleteTag($filePath, $tag) {
-        return $this->runPython('api.py', 'delete_tag', $this->config['db_path'], $this->config['photo_base_dir'], $filePath, $tag);
+        return $this->runPython('api.py', 'delete_tag', $filePath, $tag);
     }
 
     public function updateLocation($filePath, $lat, $lng) {
-        return $this->runPython('api.py', 'update_location', $this->config['db_path'], $this->config['photo_base_dir'], $filePath, $lat === null ? 'null' : $lat, $lng === null ? 'null' : $lng);
+        return $this->runPython('api.py', 'update_location', $filePath, $lat === null ? 'null' : $lat, $lng === null ? 'null' : $lng);
+    }
+
+    public function setPublic($filePath, $isPublic) {
+        return $this->runPython('api.py', 'set_public', $filePath, $isPublic ? 'true' : 'false');
+    }
+
+    public function deleteImage($filePath) {
+        return $this->runPython('api.py', 'delete_image', $filePath);
     }
 
     public function aiTagImage($filePath) {
-        return $this->runPython('auto_tagger.py', 'tag_image', 
-            $this->config['db_path'], 
-            $this->config['photo_base_dir'], 
-            $this->config['labels_path'], 
-            $this->config['models_dir'], 
-            $filePath
-        );
+        // Special case: uses auto_tagger.py which doesn't follow the same arg pattern yet
+        // Let's just adjust it if needed or leave as is if it doesn't need context
+        $scriptPath = $this->backendDir . '/auto_tagger.py';
+        $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " tag_image";
+        $cmd .= " " . escapeshellarg($this->config['db_path']);
+        $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
+        $cmd .= " " . escapeshellarg($this->config['labels_path']);
+        $cmd .= " " . escapeshellarg($this->config['models_dir']);
+        $cmd .= " " . escapeshellarg($filePath);
+        $cmd .= " 2>/dev/null";
+        $output = shell_exec($cmd);
+        return json_decode($output, true);
     }
 
     public function aiTagAlbum($albumPath) {
-        return $this->runPython('auto_tagger.py', 'tag_album', 
-            $this->config['db_path'], 
-            $this->config['photo_base_dir'], 
-            $this->config['labels_path'], 
-            $this->config['models_dir'], 
-            $albumPath
-        );
+        $scriptPath = $this->backendDir . '/auto_tagger.py';
+        $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " tag_album";
+        $cmd .= " " . escapeshellarg($this->config['db_path']);
+        $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
+        $cmd .= " " . escapeshellarg($this->config['labels_path']);
+        $cmd .= " " . escapeshellarg($this->config['models_dir']);
+        $cmd .= " " . escapeshellarg($albumPath);
+        $cmd .= " 2>/dev/null";
+        $output = shell_exec($cmd);
+        return json_decode($output, true);
     }
 
     public function fineTune() {
-        return $this->runPython('fine_tune.py', 'train');
+        // ...
     }
 }
