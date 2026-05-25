@@ -39,7 +39,6 @@ class SlashGallery {
         $scriptPath = $this->backendDir . '/' . $script;
         $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($action);
         
-        // Always pass security context as first two args to api.py
         $cmd .= " " . escapeshellarg($this->config['db_path']);
         $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
         $cmd .= " " . escapeshellarg($this->isAdmin ? 'true' : 'false');
@@ -73,6 +72,10 @@ class SlashGallery {
         return $this->runPython('api.py', 'get_all_images', $filterTag ?? 'null');
     }
 
+    public function getByMessageId($msgId) {
+        return $this->runPython('api.py', 'get_by_message_id', $msgId);
+    }
+
     public function getAllTags() {
         return $this->runPython('api.py', 'get_all_tags');
     }
@@ -87,6 +90,14 @@ class SlashGallery {
 
     public function deleteTag($filePath, $tag) {
         return $this->runPython('api.py', 'delete_tag', $filePath, $tag);
+    }
+
+    public function setMessageId($filePath, $msgId) {
+        return $this->runPython('api.py', 'set_message_id', $filePath, $msgId);
+    }
+
+    public function deleteByMessageId($msgId) {
+        return $this->runPython('api.py', 'delete_by_message_id', $msgId);
     }
 
     public function updateLocation($filePath, $lat, $lng) {
@@ -131,3 +142,4 @@ class SlashGallery {
         return $this->runPython('fine_tune.py', 'train');
     }
 }
+?>

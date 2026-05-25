@@ -21,7 +21,8 @@ class GalleryDB:
                 file_size INTEGER,
                 latitude REAL,
                 longitude REAL,
-                is_public INTEGER DEFAULT 1
+                is_public INTEGER DEFAULT 1,
+                phorum_message_id INTEGER
             )
         """)
         cursor.execute("""
@@ -97,6 +98,18 @@ class GalleryDB:
             
         sql += " ORDER BY i.id DESC"
         cursor.execute(sql, params)
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'path': os.path.relpath(os.path.normpath(row['file_path']), os.path.normpath(self.photo_base_dir))
+            })
+        conn.close()
+        return results
+
+    def get_by_message_id(self, message_id):
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path FROM images WHERE phorum_message_id = ?", (message_id,))
         results = []
         for row in cursor.fetchall():
             results.append({
@@ -207,6 +220,33 @@ class GalleryDB:
             
             cursor.execute("INSERT OR IGNORE INTO tags (image_id, tag_name, source) VALUES (?, ?, ?)", (image_id, tag_name.lower().strip(), source))
             conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        finally:
+            conn.close()
+
+    def set_message_id(self, rel_path, message_id):
+        full_path = os.path.normpath(os.path.join(self.photo_base_dir, rel_path))
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE images SET phorum_message_id = ? WHERE file_path = ?", (message_id, full_path))
+            conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        finally:
+            conn.close()
+
+    def delete_by_message_id(self, message_id):
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT file_path FROM images WHERE phorum_message_id = ?", (message_id,))
+            rows = cursor.fetchall()
+            for row in rows:
+                self.delete_image(os.path.relpath(row['file_path'], self.photo_base_dir))
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}

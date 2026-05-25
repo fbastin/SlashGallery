@@ -21,9 +21,6 @@ def handle_api():
 
     if action == "get_summarized_timeline":
         print(json.dumps(db.get_summarized_timeline()))
-    elif action == "get_photos_by_date":
-        date = sys.argv[6] if len(sys.argv) > 6 else ""
-        print(json.dumps(db.get_photos_by_date(date)))
     elif action == "get_geolocated":
         print(json.dumps(db.get_geolocated(is_admin, user_tag)))
     elif action == "get_all_tags":
@@ -31,6 +28,9 @@ def handle_api():
     elif action == "get_all_images":
         filter_tag = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] != 'null' else None
         print(json.dumps(db.get_all_images(is_admin, user_tag, filter_tag)))
+    elif action == "get_by_message_id":
+        msg_id = int(sys.argv[6])
+        print(json.dumps(db.get_by_message_id(msg_id)))
     elif action == "search":
         filter_tag = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] != 'null' else None
         query = sys.argv[7] if len(sys.argv) > 7 else ""
@@ -46,11 +46,13 @@ def handle_api():
         path = sys.argv[6]
         tag = sys.argv[7]
         print(json.dumps(db.delete_tag(path, tag)))
-    elif action == "update_location":
+    elif action == "set_message_id":
         path = sys.argv[6]
-        lat = float(sys.argv[7]) if sys.argv[7] != 'null' else None
-        lng = float(sys.argv[8]) if sys.argv[8] != 'null' else None
-        print(json.dumps(db.update_location(path, lat, lng)))
+        msg_id = int(sys.argv[7])
+        print(json.dumps(db.set_message_id(path, msg_id)))
+    elif action == "delete_by_message_id":
+        msg_id = int(sys.argv[6])
+        print(json.dumps(db.delete_by_message_id(msg_id)))
     elif action == "set_public":
         path = sys.argv[6]
         is_public = sys.argv[7].lower() == 'true'
