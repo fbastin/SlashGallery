@@ -112,6 +112,10 @@ class SlashGallery {
         return $this->runPython('api.py', 'delete_image', $filePath);
     }
 
+    public function generateThumbnail($filePath) {
+        return $this->runPython('api.py', 'generate_thumbnail', $filePath);
+    }
+
     public function aiTagImage($filePath) {
         $scriptPath = $this->backendDir . '/auto_tagger.py';
         $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " tag_image";

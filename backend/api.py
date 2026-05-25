@@ -2,6 +2,37 @@ import sys
 import json
 import os
 from db_helper import GalleryDB
+from PIL import Image
+
+def generate_thumbnail(img_path, base_dir, size=(400, 400)):
+    try:
+        full_path = os.path.join(base_dir, img_path)
+        thumb_dir = os.path.join(base_dir, 'thumbs')
+        if not os.path.exists(thumb_dir):
+            os.makedirs(thumb_dir, exist_ok=True)
+        
+        thumb_path = os.path.join(thumb_dir, img_path)
+        
+        # Ensure subdirectories in thumbs exist
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+
+        if os.path.exists(thumb_path) and os.path.getmtime(thumb_path) > os.path.getmtime(full_path):
+            return {"success": True, "path": img_path, "status": "exists"}
+
+        with Image.open(full_path) as img:
+            # Handle orientation if present
+            try:
+                from PIL import ImageOps
+                img = ImageOps.exif_transpose(img)
+            except: pass
+            
+            img.thumbnail(size)
+            # Save as WebP if possible, or same format
+            img.save(thumb_path, optimize=True, quality=85)
+            
+        return {"success": True, "path": img_path}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # This serves as the main Python entry point for the PHP library
 def handle_api():
@@ -59,7 +90,15 @@ def handle_api():
         print(json.dumps(db.set_public(path, is_public)))
     elif action == "delete_image":
         path = sys.argv[6]
-        print(json.dumps(db.delete_image(path)))
+        res = db.delete_image(path)
+        # Also delete thumbnail
+        thumb_path = os.path.join(photo_base_dir, 'thumbs', path)
+        if os.path.exists(thumb_path):
+            os.remove(thumb_path)
+        print(json.dumps(res))
+    elif action == "generate_thumbnail":
+        path = sys.argv[6]
+        print(json.dumps(generate_thumbnail(path, photo_base_dir)))
     else:
         print(json.dumps({"success": False, "error": f"Unknown action: {action}"}))
 
