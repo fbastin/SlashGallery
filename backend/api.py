@@ -29,10 +29,12 @@ def handle_api():
     elif action == "get_all_tags":
         print(json.dumps(db.get_all_tags(is_admin, user_tag)))
     elif action == "get_all_images":
-        print(json.dumps(db.get_all_images(is_admin, user_tag)))
+        filter_tag = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] != 'null' else None
+        print(json.dumps(db.get_all_images(is_admin, user_tag, filter_tag)))
     elif action == "search":
-        query = sys.argv[6] if len(sys.argv) > 6 else ""
-        print(json.dumps(db.search(query, is_admin, user_tag)))
+        filter_tag = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] != 'null' else None
+        query = sys.argv[7] if len(sys.argv) > 7 else ""
+        print(json.dumps(db.search(query, is_admin, user_tag, filter_tag)))
     elif action == "get_batch_metadata":
         paths = json.loads(sys.argv[6]) if len(sys.argv) > 6 else []
         print(json.dumps(db.get_batch_metadata(paths)))

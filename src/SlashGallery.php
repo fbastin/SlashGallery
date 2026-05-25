@@ -65,12 +65,12 @@ class SlashGallery {
         return $this->runPython('api.py', 'get_geolocated');
     }
 
-    public function search($query) {
-        return $this->runPython('api.py', 'search', $query);
+    public function search($query, $filterTag = null) {
+        return $this->runPython('api.py', 'search', $filterTag ?? 'null', $query);
     }
 
-    public function getAllImages() {
-        return $this->runPython('api.py', 'get_all_images');
+    public function getAllImages($filterTag = null) {
+        return $this->runPython('api.py', 'get_all_images', $filterTag ?? 'null');
     }
 
     public function getAllTags() {
@@ -102,8 +102,6 @@ class SlashGallery {
     }
 
     public function aiTagImage($filePath) {
-        // Special case: uses auto_tagger.py which doesn't follow the same arg pattern yet
-        // Let's just adjust it if needed or leave as is if it doesn't need context
         $scriptPath = $this->backendDir . '/auto_tagger.py';
         $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " tag_image";
         $cmd .= " " . escapeshellarg($this->config['db_path']);
@@ -130,6 +128,6 @@ class SlashGallery {
     }
 
     public function fineTune() {
-        // ...
+        return $this->runPython('fine_tune.py', 'train');
     }
 }

@@ -70,8 +70,6 @@ class GalleryDB:
         return results
 
     def get_summarized_timeline(self):
-        # Timeline remains public for now or filtered? User didn't specify. 
-        # Let's keep it simple and filter it too if needed, but usually timeline is a summary.
         conn = self.get_conn()
         cursor = conn.cursor()
         cursor.execute("""
@@ -85,11 +83,20 @@ class GalleryDB:
         conn.close()
         return results
 
-    def get_all_images(self, is_admin=False, user_tag=None):
+    def get_all_images(self, is_admin=False, user_tag=None, filter_tag=None):
         conn = self.get_conn()
         cursor = conn.cursor()
-        clause = self._get_privacy_clause(is_admin, user_tag)
-        cursor.execute(f"SELECT file_path FROM images i WHERE {clause} ORDER BY id DESC")
+        privacy_clause = self._get_privacy_clause(is_admin, user_tag)
+        
+        sql = f"SELECT DISTINCT i.file_path FROM images i LEFT JOIN tags t ON i.id = t.image_id WHERE ({privacy_clause})"
+        params = []
+        
+        if filter_tag:
+            sql += " AND i.id IN (SELECT image_id FROM tags WHERE tag_name = ?)"
+            params.append(filter_tag.lower())
+            
+        sql += " ORDER BY i.id DESC"
+        cursor.execute(sql, params)
         results = []
         for row in cursor.fetchall():
             results.append({
@@ -98,20 +105,28 @@ class GalleryDB:
         conn.close()
         return results
 
-    def search(self, query_str, is_admin=False, user_tag=None):
+    def search(self, query_str, is_admin=False, user_tag=None, filter_tag=None):
         conn = self.get_conn()
         cursor = conn.cursor()
         keywords = query_str.split()
-        if not keywords: return []
-        clause = self._get_privacy_clause(is_admin, user_tag)
-        sql = f"SELECT DISTINCT i.file_path, i.latitude, i.longitude, i.date_taken FROM images i LEFT JOIN tags t ON i.id = t.image_id WHERE ({clause}) AND "
-        conditions = []
+        privacy_clause = self._get_privacy_clause(is_admin, user_tag)
+        
+        sql = f"SELECT DISTINCT i.file_path, i.latitude, i.longitude, i.date_taken FROM images i LEFT JOIN tags t ON i.id = t.image_id WHERE ({privacy_clause})"
         params = []
-        for kw in keywords:
-            kw_pattern = f"%{kw}%"
-            conditions.append("(i.file_path LIKE ? OR t.tag_name LIKE ?)")
-            params.extend([kw_pattern, kw_pattern])
-        sql += "(" + " AND ".join(conditions) + ") LIMIT 500"
+        
+        if filter_tag:
+            sql += " AND i.id IN (SELECT image_id FROM tags WHERE tag_name = ?)"
+            params.append(filter_tag.lower())
+
+        if keywords:
+            conditions = []
+            for kw in keywords:
+                kw_pattern = f"%{kw}%"
+                conditions.append("(i.file_path LIKE ? OR t.tag_name LIKE ?)")
+                params.extend([kw_pattern, kw_pattern])
+            sql += " AND (" + " AND ".join(conditions) + ")"
+            
+        sql += " LIMIT 500"
         cursor.execute(sql, params)
         results = []
         for row in cursor.fetchall():
@@ -190,7 +205,7 @@ class GalleryDB:
             else: 
                 image_id = row['id']
             
-            cursor.execute("INSERT INTO tags (image_id, tag_name, source) VALUES (?, ?, ?)", (image_id, tag_name.lower().strip(), source))
+            cursor.execute("INSERT OR IGNORE INTO tags (image_id, tag_name, source) VALUES (?, ?, ?)", (image_id, tag_name.lower().strip(), source))
             conn.commit()
             return {"success": True}
         except Exception as e:
