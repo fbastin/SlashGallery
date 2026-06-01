@@ -62,7 +62,7 @@ class GalleryDB:
         results = []
         for row in cursor.fetchall():
             results.append({
-                'path': os.path.relpath(os.path.normpath(row['file_path']), os.path.normpath(self.photo_base_dir)),
+                'path': row['file_path'] if not os.path.isabs(row['file_path']) else os.path.relpath(row['file_path'], self.photo_base_dir),
                 'lat': row['latitude'],
                 'lng': row['longitude'],
                 'name': row['file_name']
@@ -100,9 +100,10 @@ class GalleryDB:
         cursor.execute(sql, params)
         results = []
         for row in cursor.fetchall():
-            results.append({
-                'path': os.path.relpath(os.path.normpath(row['file_path']), os.path.normpath(self.photo_base_dir))
-            })
+            fp = row['file_path']
+            if os.path.isabs(fp):
+                fp = os.path.relpath(fp, self.photo_base_dir)
+            results.append({'path': fp})
         conn.close()
         return results
 
@@ -113,7 +114,7 @@ class GalleryDB:
         results = []
         for row in cursor.fetchall():
             results.append({
-                'path': os.path.relpath(os.path.normpath(row['file_path']), os.path.normpath(self.photo_base_dir))
+                'path': row['file_path'] if not os.path.isabs(row['file_path']) else os.path.relpath(row['file_path'], self.photo_base_dir)
             })
         conn.close()
         return results
@@ -144,7 +145,7 @@ class GalleryDB:
         results = []
         for row in cursor.fetchall():
             results.append({
-                'path': os.path.relpath(os.path.normpath(row['file_path']), os.path.normpath(self.photo_base_dir)),
+                'path': row['file_path'] if not os.path.isabs(row['file_path']) else os.path.relpath(row['file_path'], self.photo_base_dir),
                 'lat': row['latitude'],
                 'lng': row['longitude']
             })
@@ -154,25 +155,22 @@ class GalleryDB:
     def get_batch_metadata(self, file_paths):
         conn = self.get_conn()
         cursor = conn.cursor()
-        full_paths = [os.path.normpath(os.path.join(self.photo_base_dir, p)) for p in file_paths]
-        if not full_paths: return {'tags': {}, 'meta': {}}
-        
-        placeholders = ', '.join(['?'] * len(full_paths))
+        if not file_paths: return {'tags': {}, 'meta': {}}
+
+        placeholders = ', '.join(['?'] * len(file_paths))
         sql_tags = f"SELECT i.file_path, t.tag_name, t.source FROM tags t JOIN images i ON t.image_id = i.id WHERE i.file_path IN ({placeholders})"
-        cursor.execute(sql_tags, full_paths)
+        cursor.execute(sql_tags, file_paths)
         tags_results = {}
-        norm_base = os.path.normpath(self.photo_base_dir)
         for row in cursor.fetchall():
-            rel_path = os.path.relpath(os.path.normpath(row['file_path']), norm_base)
-            if rel_path not in tags_results: tags_results[rel_path] = []
-            tags_results[rel_path].append({'tag_name': row['tag_name'], 'source': row['source']})
-            
+            fp = row['file_path']
+            if fp not in tags_results: tags_results[fp] = []
+            tags_results[fp].append({'tag_name': row['tag_name'], 'source': row['source']})
+
         sql_coords = f"SELECT file_path, latitude, longitude, date_taken, is_public FROM images WHERE file_path IN ({placeholders})"
-        cursor.execute(sql_coords, full_paths)
+        cursor.execute(sql_coords, file_paths)
         meta_results = {}
         for row in cursor.fetchall():
-            rel_path = os.path.relpath(os.path.normpath(row['file_path']), norm_base)
-            meta_results[rel_path] = {'lat': row['latitude'], 'lng': row['longitude'], 'date': row['date_taken'], 'is_public': bool(row['is_public'])}
+            meta_results[row['file_path']] = {'lat': row['latitude'], 'lng': row['longitude'], 'date': row['date_taken'], 'is_public': bool(row['is_public'])}
         conn.close()
         return {'tags': tags_results, 'meta': meta_results}
 
@@ -227,11 +225,10 @@ class GalleryDB:
             conn.close()
 
     def set_message_id(self, rel_path, message_id):
-        full_path = os.path.normpath(os.path.join(self.photo_base_dir, rel_path))
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            cursor.execute("UPDATE images SET phorum_message_id = ? WHERE file_path = ?", (message_id, full_path))
+            cursor.execute("UPDATE images SET phorum_message_id = ? WHERE file_path = ?", (message_id, rel_path))
             conn.commit()
             return {"success": True}
         except Exception as e:
@@ -246,7 +243,7 @@ class GalleryDB:
             cursor.execute("SELECT file_path FROM images WHERE phorum_message_id = ?", (message_id,))
             rows = cursor.fetchall()
             for row in rows:
-                self.delete_image(os.path.relpath(row['file_path'], self.photo_base_dir))
+                self.delete_image(row['file_path'])
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -254,22 +251,20 @@ class GalleryDB:
             conn.close()
 
     def update_location(self, rel_path, lat, lng):
-        full_path = os.path.normpath(os.path.join(self.photo_base_dir, rel_path))
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            cursor.execute("UPDATE images SET latitude = ?, longitude = ? WHERE file_path = ?", (lat, lng, full_path))
+            cursor.execute("UPDATE images SET latitude = ?, longitude = ? WHERE file_path = ?", (lat, lng, rel_path))
             conn.commit()
             return True
         except: return False
         finally: conn.close()
 
     def set_public(self, rel_path, is_public):
-        full_path = os.path.normpath(os.path.join(self.photo_base_dir, rel_path))
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            cursor.execute("UPDATE images SET is_public = ? WHERE file_path = ?", (1 if is_public else 0, full_path))
+            cursor.execute("UPDATE images SET is_public = ? WHERE file_path = ?", (1 if is_public else 0, rel_path))
             conn.commit()
             return {"success": True}
         except Exception as e:
@@ -282,19 +277,20 @@ class GalleryDB:
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            # Get ID first
-            cursor.execute("SELECT id FROM images WHERE file_path = ?", (full_path,))
+            cursor.execute("SELECT id, phorum_message_id FROM images WHERE file_path = ?", (rel_path,))
             row = cursor.fetchone()
             if row:
                 image_id = row['id']
+                msg_id = row['phorum_message_id']
                 cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
                 cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
                 conn.commit()
-            
-            # Remove file from disk
-            if os.path.exists(full_path):
-                os.remove(full_path)
-            return {"success": True}
+                if not msg_id and os.path.exists(full_path):
+                    os.remove(full_path)
+                    thumb = os.path.join(self.photo_base_dir, 'thumbs', rel_path)
+                    if os.path.exists(thumb):
+                        os.remove(thumb)
+            return {"success": True, "file_deleted": not bool(row and row['phorum_message_id'])}
         except Exception as e:
             return {"success": False, "error": str(e)}
         finally:

@@ -149,6 +149,28 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
     z-index: 10;
 }
 
+.btn-delete-mini {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    background: rgba(180, 30, 30, 0.7);
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: background 0.2s;
+}
+.btn-delete-mini:hover {
+    background: rgba(200, 20, 20, 0.95);
+}
+
 .selection-checkbox {
     position: absolute;
     top: 5px;
@@ -329,6 +351,7 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
                         <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="<?php echo htmlspecialchars($imgName); ?>" loading="lazy">
                     </a>
                     <button class="btn-ai-mini" title="Taguer par IA" onclick="aiTagImage(event, '<?php echo addslashes($img); ?>')">🪄</button>
+                    <button class="btn-delete-mini" title="Supprimer" onclick="event.preventDefault(); event.stopPropagation(); deleteImage(event, '<?php echo addslashes($img); ?>')">🗑️</button>
                 </div>
                 <div class="gallery-item-name" title="<?php echo htmlspecialchars($imgName); ?>"><?php echo htmlspecialchars($imgName); ?></div>
                 
@@ -483,6 +506,18 @@ function addTag(event, filePath) {
     .then(r => r.json()).then(data => {
         if (data.success) location.reload();
         else alert('Erreur: ' + data.error);
+    });
+}
+
+function deleteImage(event, filePath) {
+    event.preventDefault(); event.stopPropagation();
+    if (!confirm('Supprimer cette image ?\n\n' + filePath)) return;
+    const formData = new FormData();
+    formData.append('file', filePath);
+    fetch('delete_image.php', { method: 'POST', body: formData })
+    .then(r => r.json()).then(data => {
+        if (data.success) location.reload();
+        else alert('Erreur: ' + (data.error || 'Échec de la suppression'));
     });
 }
 
