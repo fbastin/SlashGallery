@@ -170,6 +170,57 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
 .btn-delete-mini:hover {
     background: rgba(200, 20, 20, 0.95);
 }
+.btn-addtag-mini {
+    position: absolute;
+    top: 5px;
+    right: 42px;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: background 0.2s;
+}
+.btn-addtag-mini:hover {
+    background: rgba(0,0,0,0.8);
+}
+.addtag-inline {
+    position: absolute;
+    top: 5px;
+    right: 42px;
+    z-index: 11;
+}
+.addtag-inline input {
+    font-size: 0.75rem;
+    padding: 4px 6px;
+    border: 1px solid #fff;
+    border-radius: 4px;
+    width: 120px;
+    background: rgba(255,255,255,0.95);
+}
+.location-mini {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    background: rgba(0,0,0,0.5);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+}
 
 .selection-checkbox {
     position: absolute;
@@ -352,23 +403,19 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
                     </a>
                     <button class="btn-ai-mini" title="Taguer par IA" onclick="aiTagImage(event, '<?php echo addslashes($img); ?>')">🪄</button>
                     <button class="btn-delete-mini" title="Supprimer" onclick="event.preventDefault(); event.stopPropagation(); deleteImage(event, '<?php echo addslashes($img); ?>')">🗑️</button>
-                </div>
-                <div class="gallery-item-name" title="<?php echo htmlspecialchars($imgName); ?>"><?php echo htmlspecialchars($imgName); ?></div>
-                
-                <div class="location-info">
+                    <div class="btn-addtag-mini" title="Ajouter une étiquette" onclick="event.preventDefault(); event.stopPropagation(); showTagInput(this, '<?php echo addslashes($img); ?>')">+</div>
+                    <form class="addtag-inline" onsubmit="addTag(event, '<?php echo addslashes($img); ?>')" onclick="event.stopPropagation();" style="display:none;">
+                        <input type="text" placeholder="Étiquette..." required>
+                    </form>
                     <?php if ($coords['lat'] !== null): ?>
-                        📍 <a href="https://www.openstreetmap.org/?mlat=<?php echo $coords['lat']; ?>&mlon=<?php echo $coords['lng']; ?>#map=15/<?php echo $coords['lat']; ?>/<?php echo $coords['lng']; ?>" target="_blank" class="location-link">
-                            Voir sur la carte
-                        </a>
-                        <button onclick="toggleLocationEdit('<?php echo addslashes($img); ?>')" style="border:none; background:none; cursor:pointer; padding:0; margin-left:5px;">✏️</button>
-                    <?php else: ?>
-                        <button onclick="toggleLocationEdit('<?php echo addslashes($img); ?>')" style="border:none; background:none; cursor:pointer; font-size: 0.7rem; color: var(--color-accent);">+ Ajouter une position</button>
+                        <div class="location-mini" title="Géolocalisée" onclick="event.preventDefault(); event.stopPropagation(); toggleLocationEdit('<?php echo addslashes($img); ?>')">📍</div>
                     <?php endif; ?>
-                    <div id="loc-edit-<?php echo md5($img); ?>" style="display:none; margin-top:5px;">
-                        <input type="text" id="lat-<?php echo md5($img); ?>" placeholder="Lat" style="width:45%; font-size:0.7rem;" value="<?php echo $coords['lat']; ?>">
-                        <input type="text" id="lng-<?php echo md5($img); ?>" placeholder="Lng" style="width:45%; font-size:0.7rem;" value="<?php echo $coords['lng']; ?>">
-                        <button onclick="saveLocation('<?php echo addslashes($img); ?>')" style="width:100%; margin-top:2px; font-size:0.7rem;">Sauver</button>
-                    </div>
+                </div>
+
+                <div class="location-edit" id="loc-edit-<?php echo md5($img); ?>" style="display:none; padding: 4px 6px;">
+                    <input type="text" id="lat-<?php echo md5($img); ?>" placeholder="Lat" style="width:45%; font-size:0.7rem;" value="<?php echo $coords['lat']; ?>">
+                    <input type="text" id="lng-<?php echo md5($img); ?>" placeholder="Lng" style="width:45%; font-size:0.7rem;" value="<?php echo $coords['lng']; ?>">
+                    <button onclick="saveLocation('<?php echo addslashes($img); ?>')" style="width:100%; margin-top:2px; font-size:0.7rem;">Sauver</button>
                 </div>
 
                 <div class="tags-list">
@@ -381,11 +428,6 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
                         </div>
                     <?php endforeach; ?>
                 </div>
-
-                <form class="add-tag-form" onsubmit="addTag(event, '<?php echo addslashes($img); ?>')">
-                    <input type="text" class="add-tag-input" placeholder="Tag..." required>
-                    <button type="submit" class="btn-add-tag">+</button>
-                </form>
             </div>
         <?php endforeach; ?>
     </div>
@@ -493,10 +535,21 @@ function clearSelection() {
     });
 }
 
+function showTagInput(btn, filePath) {
+    var form = btn.nextElementSibling;
+    btn.style.display = 'none';
+    form.style.display = 'block';
+    var input = form.querySelector('input');
+    input.focus();
+    input.addEventListener('blur', function() {
+        setTimeout(function() { form.style.display = 'none'; btn.style.display = ''; }, 200);
+    });
+}
+
 function addTag(event, filePath) {
     event.preventDefault();
     const form = event.target;
-    const input = form.querySelector('.add-tag-input');
+    const input = form.querySelector('input');
     const tag = input.value.trim();
     if (!tag) return;
     const formData = new FormData();

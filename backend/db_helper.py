@@ -184,11 +184,10 @@ class GalleryDB:
         return results
 
     def delete_tag(self, rel_path, tag_name):
-        full_path = os.path.normpath(os.path.join(self.photo_base_dir, rel_path))
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE file_path = ?) AND tag_name = ?", (full_path, tag_name.lower().strip()))
+            cursor.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE file_path = ?) AND tag_name = ?", (rel_path, tag_name.lower().strip()))
             conn.commit()
             return {"success": True}
         except Exception as e:
@@ -201,19 +200,19 @@ class GalleryDB:
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT id FROM images WHERE file_path = ?", (full_path,))
+            cursor.execute("SELECT id FROM images WHERE file_path = ?", (rel_path,))
             row = cursor.fetchone()
             if not row:
                 if os.path.exists(full_path):
                     stats = os.stat(full_path)
                     cursor.execute(
                         "INSERT INTO images (file_path, file_name, date_added, file_size) VALUES (?, ?, ?, ?)",
-                        (full_path, os.path.basename(full_path), datetime.now(), stats.st_size)
+                        (rel_path, os.path.basename(rel_path), datetime.now(), stats.st_size)
                     )
                     image_id = cursor.lastrowid
-                else: 
-                    return {"success": False, "error": f"File not found on disk: {full_path}"}
-            else: 
+                else:
+                    return {"success": False, "error": f"File not found: {rel_path}"}
+            else:
                 image_id = row['id']
             
             cursor.execute("INSERT OR IGNORE INTO tags (image_id, tag_name, source) VALUES (?, ?, ?)", (image_id, tag_name.lower().strip(), source))
