@@ -108,6 +108,10 @@ class SlashGallery {
         return $this->runPython('api.py', 'set_public', $filePath, $isPublic ? 'true' : 'false');
     }
 
+    public function setLicense($filePath, $license) {
+        return $this->runPython('api.py', 'set_license', $filePath, (string)$license);
+    }
+
     public function deleteImage($filePath) {
         return $this->runPython('api.py', 'delete_image', $filePath);
     }

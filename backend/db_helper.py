@@ -35,6 +35,12 @@ class GalleryDB:
                 UNIQUE(image_id, tag_name, source)
             )
         """)
+        # Migration : licence définie par le propriétaire (domaine public, CC,
+        # tous droits réservés). NULL = non défini (photo membre par défaut).
+        cursor.execute("PRAGMA table_info(images)")
+        cols = [r[1] for r in cursor.fetchall()]
+        if 'license' not in cols:
+            cursor.execute("ALTER TABLE images ADD COLUMN license TEXT")
         conn.commit()
         conn.close()
 
@@ -166,11 +172,11 @@ class GalleryDB:
             if fp not in tags_results: tags_results[fp] = []
             tags_results[fp].append({'tag_name': row['tag_name'], 'source': row['source']})
 
-        sql_coords = f"SELECT file_path, latitude, longitude, date_taken, is_public FROM images WHERE file_path IN ({placeholders})"
+        sql_coords = f"SELECT file_path, latitude, longitude, date_taken, is_public, license FROM images WHERE file_path IN ({placeholders})"
         cursor.execute(sql_coords, file_paths)
         meta_results = {}
         for row in cursor.fetchall():
-            meta_results[row['file_path']] = {'lat': row['latitude'], 'lng': row['longitude'], 'date': row['date_taken'], 'is_public': bool(row['is_public'])}
+            meta_results[row['file_path']] = {'lat': row['latitude'], 'lng': row['longitude'], 'date': row['date_taken'], 'is_public': bool(row['is_public']), 'license': row['license']}
         conn.close()
         return {'tags': tags_results, 'meta': meta_results}
 
@@ -258,6 +264,18 @@ class GalleryDB:
             return True
         except: return False
         finally: conn.close()
+
+    def set_license(self, rel_path, license_code):
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE images SET license = ? WHERE file_path = ?", (license_code or None, rel_path))
+            conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        finally:
+            conn.close()
 
     def set_public(self, rel_path, is_public):
         conn = self.get_conn()

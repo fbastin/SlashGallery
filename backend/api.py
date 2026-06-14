@@ -88,6 +88,10 @@ def handle_api():
         path = sys.argv[6]
         is_public = sys.argv[7].lower() == 'true'
         print(json.dumps(db.set_public(path, is_public)))
+    elif action == "set_license":
+        path = sys.argv[6]
+        license_code = sys.argv[7] if len(sys.argv) > 7 else ''
+        print(json.dumps(db.set_license(path, license_code)))
     elif action == "delete_image":
         path = sys.argv[6]
         res = db.delete_image(path)
