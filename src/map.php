@@ -14,9 +14,9 @@ $filterPath = $_GET['path'] ?? '';
 $filterSearch = $_GET['q'] ?? '';
 
 $page_meta = '<meta name="robots" content="noindex, nofollow">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />';
+<link rel="stylesheet" href="/js/vendor/leaflet/leaflet.css?v=1.9.4" />
+<link rel="stylesheet" href="/js/vendor/leaflet-markercluster/MarkerCluster.css?v=1.4.1" />
+<link rel="stylesheet" href="/js/vendor/leaflet-markercluster/MarkerCluster.Default.css?v=1.4.1" />';
 include '../header.php';
 
 if ($filterSearch !== '') {
@@ -66,8 +66,8 @@ if ($filterSearch !== '') {
     <div id="map"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+<script src="/js/vendor/leaflet/leaflet.js?v=1.9.4"></script>
+<script src="/js/vendor/leaflet-markercluster/leaflet.markercluster.js?v=1.4.1"></script>
 <script>
 const map = L.map('map').setView([20, 0], 2);
 
