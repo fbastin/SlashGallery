@@ -478,7 +478,7 @@ function hex_md5(s) {
 }
 // Let's use a simpler way since I can't easily include md5.js
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
+<script src="/js/vendor/blueimp-md5/md5.min.js?v=2.19.0"></script>
 <script>
 function toggleLocationEdit(path) {
     const id = md5(path);
