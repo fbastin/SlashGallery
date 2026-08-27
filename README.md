@@ -23,6 +23,7 @@ $gallery = new SlashGallery([
 - `backend/` : Scripts Python (IA, Indexation, SQLite).
 - `css/` / `js/` : Assets pour l'interface.
 - `models/` : Stockage des modèles d'IA personnalisés.
+- `docs/` : Documentation d'utilisation.
 
 ## Fonctionnalités
 - **Recherche Instantanée** via SQLite.
@@ -30,4 +31,18 @@ $gallery = new SlashGallery([
 - **Apprentissage continu** (Fine-tuning) basé sur vos corrections.
 - **Vue Chronologique** et **Carte interactive** (Leaflet/OSM).
 - **Export ZIP** de sélections personnalisées.
+- **Albums** (collections DB + vignettes aléatoires pour les dossiers).
+- **Photos aléatoires** filtrées par visibilité.
+
+## Documentation
+
+Consultez [docs/USAGE.md](docs/USAGE.md) pour le guide complet d'intégration
+(configuration, sécurité, recherche, albums, IA, backend Python).
+
+## Tests
+
+Les tests Backend s'exécutent sans dépendances externes (stdlib `unittest`) :
+
+```bash
+python3 -m unittest discover -s tests -v
 ```

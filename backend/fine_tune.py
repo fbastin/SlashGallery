@@ -1,4 +1,5 @@
 import os
+import sys
 import sqlite3
 import torch
 import torch.nn as nn
@@ -9,14 +10,12 @@ from PIL import Image
 import json
 from datetime import datetime
 
-# Configuration
-DB_PATH = '/home/bastin/Cloud/Photos/photo_catalog.db'
-PHOTO_BASE_DIR = '/home/bastin/Cloud/Photos'
-CUSTOM_MODEL_PATH = '/var/www/slashbin.net/photos/models/custom_resnet50.pth'
-LABEL_MAP_PATH = '/var/www/slashbin.net/photos/models/custom_labels.json'
-MODEL_DIR = '/var/www/slashbin.net/photos/models'
-
-os.environ['TORCH_HOME'] = MODEL_DIR
+# Configuration (overridable via command-line args)
+DB_PATH = None
+PHOTO_BASE_DIR = None
+CUSTOM_MODEL_PATH = None
+LABEL_MAP_PATH = None
+MODEL_DIR = None
 
 class PhotoDataset(Dataset):
     def __init__(self, image_paths, labels, label_to_idx, transform=None):
@@ -48,6 +47,7 @@ class PhotoDataset(Dataset):
             return torch.zeros(3, 224, 224), torch.zeros(self.num_classes)
 
 def train_model(epochs=5, batch_size=8, lr=0.001):
+    os.environ['TORCH_HOME'] = MODEL_DIR
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -68,14 +68,27 @@ def train_model(epochs=5, batch_size=8, lr=0.001):
     image_paths = []
     image_labels = []
     unique_tags = set()
-    
+
+    base = os.path.normpath(PHOTO_BASE_DIR)
+
+    def _resolve(path):
+        if os.path.isabs(path):
+            candidate = os.path.normpath(path)
+        else:
+            candidate = os.path.normpath(os.path.join(base, path))
+        if not candidate.startswith(base + os.sep) and candidate != base:
+            return None
+        return candidate
+
     for path, tags_str in rows:
-        if os.path.exists(path):
-            image_paths.append(path)
-            tags = tags_str.split(',')
-            image_labels.append(tags)
-            for t in tags:
-                unique_tags.add(t)
+        resolved = _resolve(path)
+        if resolved is None or not os.path.exists(resolved):
+            continue
+        image_paths.append(resolved)
+        tags = tags_str.split(',')
+        image_labels.append(tags)
+        for t in tags:
+            unique_tags.add(t)
     
     if not unique_tags:
         return {"success": False, "error": "No valid tags found."}
@@ -125,5 +138,19 @@ def train_model(epochs=5, batch_size=8, lr=0.001):
     return {"success": True, "tags_trained": len(tag_list), "images_used": len(image_paths)}
 
 if __name__ == "__main__":
-    import sys
+    # Expected argv: action db_path photo_base_dir is_admin user_tag models_dir
+    action = sys.argv[1] if len(sys.argv) > 1 else 'train'
+    DB_PATH = sys.argv[2] if len(sys.argv) > 2 else DB_PATH
+    PHOTO_BASE_DIR = sys.argv[3] if len(sys.argv) > 3 else PHOTO_BASE_DIR
+    is_admin = (sys.argv[4] if len(sys.argv) > 4 else '').lower() == 'true'
+    models_dir = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] != 'null' else None
+    MODEL_DIR = models_dir or MODEL_DIR or PHOTO_BASE_DIR
+
+    if not DB_PATH or not PHOTO_BASE_DIR:
+        print(json.dumps({"success": False, "error": "db_path and photo_base_dir are required"}))
+        sys.exit(1)
+
+    CUSTOM_MODEL_PATH = os.path.join(MODEL_DIR, 'custom_resnet50.pth')
+    LABEL_MAP_PATH = os.path.join(MODEL_DIR, 'custom_labels.json')
+
     print(json.dumps(train_model()))

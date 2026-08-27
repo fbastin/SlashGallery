@@ -364,7 +364,7 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
             <div style="display: flex; gap: 0.5rem;">
                 <?php if (!$isSearch && $relativeDisplayPath !== ''): ?>
                     <a href="map.php?path=<?php echo urlencode($relativeDisplayPath); ?>" class="btn btn-secondary" style="background: #1976d2; color: #fff;">🗺️ Carte de l'album</a>
-                    <button class="btn" onclick="aiTagAlbum('<?php echo addslashes($relativeDisplayPath); ?>')" style="background: #673ab7; color: #fff;">🪄 Taguer l'album</button>
+                    <button class="btn" onclick="aiTagAlbum(event, '<?php echo addslashes($relativeDisplayPath); ?>')" style="background: #673ab7; color: #fff;">🪄 Taguer l'album</button>
                 <?php endif; ?>
                 <?php if (!empty($_SESSION['blog_admin'])): ?>
                     <button class="btn btn-secondary" onclick="triggerFineTune(event)" style="background: #388e3c; color: #fff;">🧠 Optimiser l'IA</button>
@@ -374,12 +374,26 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
     </nav>
 
     <div class="gallery-grid">
+        <?php
+        // Build a random cover for each folder-style album.
+        $folderCovers = [];
+        foreach ($directories as $dir) {
+            $dirParam = ($relativeDisplayPath === '' ? '' : $relativeDisplayPath . DIRECTORY_SEPARATOR) . $dir;
+            $cover = $photoEngine->getAlbumFolderCover($dirParam);
+            $folderCovers[$dirParam] = is_array($cover) && !empty($cover['path']) ? $cover['path'] : '';
+        }
+        ?>
         <?php foreach ($directories as $dir): ?>
             <div class="gallery-item" style="min-height: auto;">
                 <?php $dirParam = ($relativeDisplayPath === '' ? '' : $relativeDisplayPath . DIRECTORY_SEPARATOR) . $dir; ?>
                 <a href="?path=<?php echo urlencode($dirParam); ?>" class="album-link">
                     <div class="album-box">
-                        <div class="album-icon">📁</div>
+                        <?php if ($folderCovers[$dirParam] !== ''): ?>
+                            <img src="serve.php?file=<?php echo urlencode($folderCovers[$dirParam]); ?>"
+                                 alt="" loading="lazy" style="width:100%; height:120px; object-fit:cover; border-radius:calc(var(--radius) - 2px);">
+                        <?php else: ?>
+                            <div class="album-icon">📁</div>
+                        <?php endif; ?>
                         <div style="font-weight: 600;"><?php echo htmlspecialchars($dir); ?></div>
                     </div>
                 </a>
@@ -464,22 +478,6 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-function toggleLocationEdit(path) {
-    const id = btoa(path).replace(/=/g, ""); // Simplified unique ID
-    // Re-using md5 approach from PHP
-    const md5id = hex_md5(path); 
-    const el = document.getElementById('loc-edit-' + md5id);
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-// Simple MD5 for JS to match PHP md5()
-function hex_md5(s) {
-    return Array.from(new TextEncoder().encode(s)).map(b => b.toString(16).padStart(2, '0')).join(''); // This is NOT md5, just a dummy for demo. 
-}
-// Let's use a simpler way since I can't easily include md5.js
-</script>
-<script src="/js/vendor/blueimp-md5/md5.min.js?v=2.19.0"></script>
-<script>
 function toggleLocationEdit(path) {
     const id = md5(path);
     const el = document.getElementById('loc-edit-' + id);
@@ -598,9 +596,10 @@ function aiTagImage(event, filePath) {
     });
 }
 
-function aiTagAlbum(albumPath) {
+function aiTagAlbum(event, albumPath) {
+    event.preventDefault();
     if (!confirm('Analyser l\'album ?')) return;
-    const btn = event.target; btn.textContent = 'Analyse...'; btn.disabled = true;
+    const btn = event.currentTarget; btn.textContent = 'Analyse...'; btn.disabled = true;
     const formData = new FormData();
     formData.append('action', 'tag_album');
     formData.append('path', albumPath);

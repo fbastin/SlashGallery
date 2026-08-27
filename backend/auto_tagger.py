@@ -14,8 +14,15 @@ from db_helper import GalleryDB
 # Suppress warnings to avoid breaking JSON output
 warnings.filterwarnings("ignore")
 
-# Initialize translator
-translator = Translator(to_lang="fr", from_lang="en")
+# Translator is created lazily: the import below performs a network call, so we
+# only construct it when a translation is actually requested.
+_translator = None
+
+def _get_translator():
+    global _translator
+    if _translator is None:
+        _translator = Translator(to_lang="fr", from_lang="en")
+    return _translator
 
 preprocess = transforms.Compose([
     transforms.Resize(256),
@@ -47,7 +54,7 @@ def get_decimal_from_obj(res, ref):
         if ref in ['S', 'W']:
             decimal = -decimal
         return decimal
-    except:
+    except (TypeError, ValueError, IndexError):
         return None
 
 def get_exif_location(full_path):
@@ -62,30 +69,40 @@ def get_exif_location(full_path):
             lat = get_decimal_from_obj(gps_info.get('GPSLatitude'), gps_info.get('GPSLatitudeRef'))
             lng = get_decimal_from_obj(gps_info.get('GPSLongitude'), gps_info.get('GPSLongitudeRef'))
             return lat, lng
-    except:
+    except Exception:
         return None, None
 
 def translate_tag(tag_en):
     try:
         main_tag = tag_en.split(',')[0]
-        return translator.translate(main_tag).lower()
-    except:
+        return _get_translator().translate(main_tag).lower()
+    except Exception:
         return None
 
-def auto_tag_image(db, labels_path, model_dir, image_rel_path, threshold=20.0):
+def load_labels(labels_path):
+    try:
+        with open(labels_path, 'r') as f:
+            return [line.strip() for line in f.readlines()]
+    except Exception as e:
+        return None
+
+def load_model(model_dir):
+    # Set Torch home to use our local models directory
+    os.environ['TORCH_HOME'] = model_dir
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    model.eval()
+    return model
+
+def auto_tag_image(db, labels_path, model_dir, image_rel_path, threshold=20.0, model=None, labels=None):
     full_path = os.path.join(db.photo_base_dir, image_rel_path)
     if not os.path.exists(full_path):
         return {"success": False, "error": f"File not found: {full_path}"}
 
-    # Set Torch home to use our local models directory
-    os.environ['TORCH_HOME'] = model_dir
-
-    # Load labels
-    try:
-        with open(labels_path, 'r') as f:
-            labels = [line.strip() for line in f.readlines()]
-    except Exception as e:
-        return {"success": False, "error": f"Failed to load labels: {str(e)}"}
+    # Load labels (reuse if passed in)
+    if labels is None:
+        labels = load_labels(labels_path)
+    if labels is None:
+        return {"success": False, "error": f"Failed to load labels: {labels_path}"}
 
     # Extract EXIF location
     lat, lng = get_exif_location(full_path)
@@ -95,15 +112,15 @@ def auto_tag_image(db, labels_path, model_dir, image_rel_path, threshold=20.0):
         img_t = preprocess(img)
         batch_t = torch.unsqueeze(img_t, 0)
 
-        # Load ImageNet model
-        imagenet_model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-        imagenet_model.eval()
+        # Load ImageNet model (reuse if passed in)
+        if model is None:
+            model = load_model(model_dir)
         
         all_detected_en = set()
 
         # 1. ImageNet detection
         with torch.no_grad():
-            out = imagenet_model(batch_t)
+            out = model(batch_t)
             probabilities = torch.nn.functional.softmax(out, dim=1)[0] * 100
             for i in range(len(probabilities)):
                 if probabilities[i] > threshold:
@@ -124,13 +141,13 @@ def auto_tag_image(db, labels_path, model_dir, image_rel_path, threshold=20.0):
         conn = db.get_conn()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT id FROM images WHERE file_path = ?", (full_path,))
+        cursor.execute("SELECT id FROM images WHERE file_path = ?", (image_rel_path,))
         row = cursor.fetchone()
         if not row:
             stats = os.stat(full_path)
             cursor.execute(
                 "INSERT INTO images (file_path, file_name, date_added, file_size, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?)",
-                (full_path, os.path.basename(full_path), datetime.now(), stats.st_size, lat, lng)
+                (image_rel_path, os.path.basename(image_rel_path), datetime.now(), stats.st_size, lat, lng)
             )
             image_id = cursor.lastrowid
         else:
@@ -156,17 +173,24 @@ def process_album(db, labels_path, model_dir, album_rel_path):
     full_album_path = os.path.join(db.photo_base_dir, album_rel_path)
     if not os.path.isdir(full_album_path):
         return {"success": False, "error": f"Not a directory: {full_album_path}"}
-    
+
+    labels = load_labels(labels_path)
+    if labels is None:
+        return {"success": False, "error": f"Failed to load labels: {labels_path}"}
+
+    # Load the model once and reuse it across the whole album
+    model = load_model(model_dir)
+
     count = 0
     errors = []
     for item in os.listdir(full_album_path):
         if item.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
-            res = auto_tag_image(db, labels_path, model_dir, os.path.join(album_rel_path, item))
+            res = auto_tag_image(db, labels_path, model_dir, os.path.join(album_rel_path, item), model=model, labels=labels)
             if res['success']:
                 count += 1
             else:
                 errors.append(f"{item}: {res['error']}")
-    
+
     return {"success": True, "processed": count, "errors": errors}
 
 if __name__ == "__main__":

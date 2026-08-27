@@ -47,9 +47,41 @@ class SlashGallery {
         foreach ($args as $arg) {
             $cmd .= " " . escapeshellarg($arg);
         }
-        $cmd .= " 2>/dev/null";
+        $cmd .= " 2>&1";
         $output = shell_exec($cmd);
-        return json_decode($output, true);
+        $decoded = json_decode($output, true);
+        if ($decoded === null) {
+            return [
+                'success' => false,
+                'error' => 'Invalid JSON from backend',
+                'raw_output' => $output === null ? 'Command failed to execute' : $output
+            ];
+        }
+        return $decoded;
+    }
+
+    private function runTagger($script, $action, ...$args) {
+        $scriptPath = $this->backendDir . '/' . $script;
+        $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($action);
+        $cmd .= " " . escapeshellarg($this->config['db_path']);
+        $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
+        $cmd .= " " . escapeshellarg($this->config['labels_path']);
+        $cmd .= " " . escapeshellarg($this->config['models_dir']);
+
+        foreach ($args as $arg) {
+            $cmd .= " " . escapeshellarg($arg);
+        }
+        $cmd .= " 2>&1";
+        $output = shell_exec($cmd);
+        $decoded = json_decode($output, true);
+        if ($decoded === null) {
+            return [
+                'success' => false,
+                'error' => 'Invalid JSON from backend',
+                'raw_output' => $output === null ? 'Command failed to execute' : $output
+            ];
+        }
+        return $decoded;
     }
 
     public function getTimeline() {
@@ -78,6 +110,38 @@ class SlashGallery {
 
     public function getAllTags() {
         return $this->runPython('api.py', 'get_all_tags');
+    }
+
+    public function getRandomImages($limit = 24) {
+        return $this->runPython('api.py', 'get_random_images', (int)$limit);
+    }
+
+    public function getAlbumFolderCover($folder) {
+        return $this->runPython('api.py', 'get_album_folder_cover', $folder);
+    }
+
+    public function createAlbum($name, $description = '') {
+        return $this->runPython('api.py', 'create_album', $name, $description);
+    }
+
+    public function listAlbums() {
+        return $this->runPython('api.py', 'list_albums');
+    }
+
+    public function getAlbum($albumId) {
+        return $this->runPython('api.py', 'get_album', (int)$albumId);
+    }
+
+    public function addImageToAlbum($albumId, $filePath) {
+        return $this->runPython('api.py', 'add_image_to_album', (int)$albumId, $filePath);
+    }
+
+    public function removeImageFromAlbum($albumId, $filePath) {
+        return $this->runPython('api.py', 'remove_image_from_album', (int)$albumId, $filePath);
+    }
+
+    public function deleteAlbum($albumId) {
+        return $this->runPython('api.py', 'delete_album', (int)$albumId);
     }
 
     public function getBatchMetadata($filePaths) {
@@ -121,33 +185,15 @@ class SlashGallery {
     }
 
     public function aiTagImage($filePath) {
-        $scriptPath = $this->backendDir . '/auto_tagger.py';
-        $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " tag_image";
-        $cmd .= " " . escapeshellarg($this->config['db_path']);
-        $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
-        $cmd .= " " . escapeshellarg($this->config['labels_path']);
-        $cmd .= " " . escapeshellarg($this->config['models_dir']);
-        $cmd .= " " . escapeshellarg($filePath);
-        $cmd .= " 2>/dev/null";
-        $output = shell_exec($cmd);
-        return json_decode($output, true);
+        return $this->runTagger('auto_tagger.py', 'tag_image', $filePath);
     }
 
     public function aiTagAlbum($albumPath) {
-        $scriptPath = $this->backendDir . '/auto_tagger.py';
-        $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " tag_album";
-        $cmd .= " " . escapeshellarg($this->config['db_path']);
-        $cmd .= " " . escapeshellarg($this->config['photo_base_dir']);
-        $cmd .= " " . escapeshellarg($this->config['labels_path']);
-        $cmd .= " " . escapeshellarg($this->config['models_dir']);
-        $cmd .= " " . escapeshellarg($albumPath);
-        $cmd .= " 2>/dev/null";
-        $output = shell_exec($cmd);
-        return json_decode($output, true);
+        return $this->runTagger('auto_tagger.py', 'tag_album', $albumPath);
     }
 
     public function fineTune() {
-        return $this->runPython('fine_tune.py', 'train');
+        return $this->runPython('fine_tune.py', 'train', $this->config['models_dir']);
     }
 }
 ?>
