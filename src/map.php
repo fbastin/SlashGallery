@@ -36,6 +36,12 @@ if ($filterSearch !== '') {
     $geolocated = $photoEngine->getGeolocated();
     $title = "Carte du Monde";
 }
+
+// La carte affiche des vignettes d'images uniquement (les vidéos ne sont pas rendues en <img>).
+$geolocated = array_values(array_filter($geolocated, function($p) {
+    $ext = strtolower(pathinfo($p['path'], PATHINFO_EXTENSION));
+    return in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+}));
 ?>
 
 <style>

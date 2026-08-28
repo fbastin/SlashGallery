@@ -35,6 +35,10 @@ class SlashGallery {
         $this->userTag = $userTag;
     }
 
+    public function getConfig() {
+        return $this->config;
+    }
+
     private function runPython($script, $action, ...$args) {
         $scriptPath = $this->backendDir . '/' . $script;
         $cmd = escapeshellarg($this->pythonVenv) . " " . escapeshellarg($scriptPath) . " " . escapeshellarg($action);
@@ -118,6 +122,14 @@ class SlashGallery {
 
     public function getAlbumFolderCover($folder) {
         return $this->runPython('api.py', 'get_album_folder_cover', $folder);
+    }
+
+    public function folderHasMedia($folder) {
+        return (bool)($this->runPython('api.py', 'folder_has_media', $folder) ?? false);
+    }
+
+    public function foldersHasMedia(array $folders) {
+        return $this->runPython('api.py', 'folders_has_media', json_encode(array_values($folders))) ?: [];
     }
 
     public function createAlbum($name, $description = '') {

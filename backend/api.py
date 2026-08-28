@@ -147,6 +147,12 @@ def handle_api():
     elif action == "get_album_folder_cover":
         folder = sys.argv[6] if len(sys.argv) > 6 else ''
         print(json.dumps(db.get_album_folder_cover(folder, is_admin, user_tag)))
+    elif action == "folder_has_media":
+        folder = sys.argv[6] if len(sys.argv) > 6 else ''
+        print(json.dumps(db.get_folder_has_media(folder, is_admin, user_tag)))
+    elif action == "folders_has_media":
+        paths = json.loads(sys.argv[6]) if len(sys.argv) > 6 else []
+        print(json.dumps(db.get_folders_has_media(paths, is_admin, user_tag)))
     elif action == "create_album":
         name = sys.argv[6] if len(sys.argv) > 6 else ''
         description = sys.argv[7] if len(sys.argv) > 7 else ''

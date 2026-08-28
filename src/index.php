@@ -49,19 +49,32 @@ if ($searchQuery !== '') {
 
     // Scan directory
     $scanItems = scandir($fullPath);
+    $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $video_extensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'wmv', '3gp', 'mpg', 'mpeg'];
+    $dirCandidates = [];
     foreach ($scanItems as $item) {
         if ($item === '.' || $item === '..') continue;
         
         $itemPath = $fullPath . DIRECTORY_SEPARATOR . $item;
         if (is_dir($itemPath)) {
-            $directories[] = $item;
+            $dirCandidates[$item] = ($relativeDisplayPath === '' ? '' : $relativeDisplayPath . DIRECTORY_SEPARATOR) . $item;
         } else {
-            $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
             $ext = strtolower(pathinfo($item, PATHINFO_EXTENSION));
-            if (in_array($ext, $allowed_extensions)) {
+            if (in_array($ext, $allowed_extensions) || in_array($ext, $video_extensions)) {
                 $images[] = ($relativeDisplayPath === '' ? '' : $relativeDisplayPath . DIRECTORY_SEPARATOR) . $item;
             }
         }
+    }
+    // N'afficher que les dossiers contenant au moins une photo ou une vidéo (appel groupé).
+    if (!empty($dirCandidates) && method_exists($photoEngine, 'foldersHasMedia')) {
+        $mediaMap = $photoEngine->foldersHasMedia($dirCandidates);
+        foreach ($dirCandidates as $item => $dirParam) {
+            if (!empty($mediaMap[$dirParam])) {
+                $directories[] = $item;
+            }
+        }
+    } else {
+        $directories = array_keys($dirCandidates);
     }
 }
 
@@ -280,6 +293,29 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
     object-fit: cover;
     border-radius: calc(var(--radius) - 2px);
 }
+.gallery-item .video-thumb {
+    width: 100%;
+    height: 180px;
+    border-radius: calc(var(--radius) - 2px);
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.gallery-item .video-play-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    color: #fff;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 4px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
 
 .add-tag-form, .location-edit-form {
     margin-top: auto;
@@ -307,6 +343,7 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
     align-items: center;
 }
 .lightbox-content { max-width: 90%; max-height: 80%; object-fit: contain; }
+#lightbox-video { max-width: 90%; max-height: 80%; width: auto; height: auto; }
 .lightbox-nav {
     position: absolute; top: 50%; transform: translateY(-50%);
     color: white; font-size: 50px; font-weight: bold; cursor: pointer; padding: 20px;
@@ -405,6 +442,8 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
             <?php 
                 $imgUrl = 'serve.php?file=' . urlencode($img);
                 $imgName = basename($img);
+                $ext = strtolower(pathinfo($img, PATHINFO_EXTENSION));
+                $isVideo = in_array($ext, ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'wmv', '3gp', 'mpg', 'mpeg']);
                 $imgTags = $allTags[$img] ?? [];
                 $coords = $allCoords[$img] ?? ['lat' => null, 'lng' => null];
                 $isSelected = in_array($img, $_SESSION['photo_selection'] ?? []);
@@ -413,7 +452,13 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
                 <div style="position: relative;">
                     <input type="checkbox" class="selection-checkbox" <?php echo $isSelected ? 'checked' : ''; ?> onchange="toggleSelection(event, '<?php echo addslashes($img); ?>')">
                     <a href="<?php echo htmlspecialchars($imgUrl); ?>" class="image-link" onclick="openLightbox(event, <?php echo $index; ?>)">
-                        <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="<?php echo htmlspecialchars($imgName); ?>" loading="lazy">
+                        <?php if ($isVideo): ?>
+                            <div class="video-thumb">
+                                <span class="video-play-icon">▶</span>
+                            </div>
+                        <?php else: ?>
+                            <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="<?php echo htmlspecialchars($imgName); ?>" loading="lazy">
+                        <?php endif; ?>
                     </a>
                     <button class="btn-ai-mini" title="Taguer par IA" onclick="aiTagImage(event, '<?php echo addslashes($img); ?>')">🪄</button>
                     <button class="btn-delete-mini" title="Supprimer" onclick="event.preventDefault(); event.stopPropagation(); deleteImage(event, '<?php echo addslashes($img); ?>')">🗑️</button>
@@ -450,25 +495,48 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
 <div id="photo-lightbox" class="lightbox" onclick="closeLightbox()">
     <span class="lightbox-nav lightbox-prev" onclick="prevPhoto(event)">&#10094;</span>
     <span class="lightbox-nav lightbox-next" onclick="nextPhoto(event)">&#10095;</span>
-    <img id="lightbox-img" class="lightbox-content">
+    <img id="lightbox-img" class="lightbox-content" style="display:none;">
+    <video id="lightbox-video" class="lightbox-content" controls style="display:none;"></video>
     <div id="lightbox-caption" class="lightbox-caption"></div>
 </div>
 
 <script>
 const galleryImages = <?php echo json_encode(array_map(function($img) {
-    return ['url' => 'serve.php?file=' . urlencode($img), 'name' => basename($img)];
+    $ext = strtolower(pathinfo($img, PATHINFO_EXTENSION));
+    $isVideo = in_array($ext, ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'wmv', '3gp', 'mpg', 'mpeg']);
+    return ['url' => 'serve.php?file=' . urlencode($img), 'name' => basename($img), 'isVideo' => $isVideo];
 }, $images)); ?>;
 let currentImageIndex = 0;
 
 function openLightbox(e, i) { e.preventDefault(); currentImageIndex = i; updateLightbox(); document.getElementById('photo-lightbox').style.display = 'flex'; }
-function closeLightbox() { document.getElementById('photo-lightbox').style.display = 'none'; }
-function updateLightbox() {
-    const img = galleryImages[currentImageIndex];
-    document.getElementById('lightbox-img').src = img.url;
-    document.getElementById('lightbox-caption').textContent = img.name;
+function closeLightbox() {
+    document.getElementById('photo-lightbox').style.display = 'none';
+    const v = document.getElementById('lightbox-video');
+    v.pause();
+    v.removeAttribute('src');
+    v.load();
 }
-function nextPhoto(e) { e.stopPropagation(); currentImageIndex = (currentImageIndex + 1) % galleryImages.length; updateLightbox(); }
-function prevPhoto(e) { e.stopPropagation(); currentImageIndex = (currentImageIndex - 1 + galleryImages.length) % galleryImages.length; updateLightbox(); }
+function updateLightbox() {
+    const item = galleryImages[currentImageIndex];
+    const imgEl = document.getElementById('lightbox-img');
+    const vidEl = document.getElementById('lightbox-video');
+    vidEl.pause();
+    if (item.isVideo) {
+        imgEl.style.display = 'none';
+        vidEl.style.display = 'block';
+        vidEl.src = item.url;
+        vidEl.load();
+    } else {
+        vidEl.removeAttribute('src');
+        vidEl.load();
+        vidEl.style.display = 'none';
+        imgEl.src = item.url;
+        imgEl.style.display = 'block';
+    }
+    document.getElementById('lightbox-caption').textContent = item.name;
+}
+function nextPhoto(e) { e.stopPropagation(); if (galleryImages.length === 0) return; currentImageIndex = (currentImageIndex + 1) % galleryImages.length; updateLightbox(); }
+function prevPhoto(e) { e.stopPropagation(); if (galleryImages.length === 0) return; currentImageIndex = (currentImageIndex - 1 + galleryImages.length) % galleryImages.length; updateLightbox(); }
 
 document.addEventListener('keydown', (e) => {
     if (document.getElementById('photo-lightbox').style.display === 'flex') {

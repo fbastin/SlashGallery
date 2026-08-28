@@ -397,19 +397,23 @@ class GalleryDB:
 
     def get_album_folder_cover(self, folder_rel_path, is_admin=False, user_tag=None):
         """Pick a single random image inside a folder (a directory-style album)
-        to use as its cover. Prefers images already indexed in the DB (privacy-
-        aware), falling back to a direct directory scan if none are indexed."""
+        to use as its cover. Searches recursively: if the folder only contains
+        subfolders, an image nested several levels deep is still used. Prefers
+        images already indexed in the DB (privacy-aware), falling back to a
+        recursive directory scan if none are indexed. Always returns a path
+        relative to photo_base_dir."""
         full_dir, _ = self.resolve_under_base(folder_rel_path)
         if full_dir is None or not os.path.isdir(full_dir):
             return None
 
+        # DB-first: any image anywhere under this folder (privacy-aware).
         conn = self.get_conn()
         cursor = conn.cursor()
         clause, params = self._get_privacy_clause(is_admin, user_tag)
         prefix = folder_rel_path.rstrip(os.sep) + os.sep
         cursor.execute(
-            f"SELECT i.file_path FROM images i WHERE {clause} AND i.file_path LIKE ? AND i.file_path NOT LIKE ? ORDER BY RANDOM() LIMIT 1",
-            params + (prefix + '%', prefix + '%' + os.sep + '%')
+            f"SELECT i.file_path FROM images i WHERE {clause} AND i.file_path LIKE ? ORDER BY RANDOM() LIMIT 1",
+            params + (prefix + '%',)
         )
         row = cursor.fetchone()
         conn.close()
@@ -420,31 +424,67 @@ class GalleryDB:
                 return {'path': os.path.relpath(fp, self.photo_base_dir)}
             return {'path': fp}
 
-        # Fallback: scan the directory directly for an image file.
+        # Fallback: recusively scan the directory tree for any image file.
         import random
         allowed = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
-        subdirs = []
         images = []
-        for item in os.listdir(full_dir):
-            item_path = os.path.join(full_dir, item)
-            if os.path.isdir(item_path):
-                subdirs.append(item_path)
-            elif item.lower().endswith(allowed):
-                images.append(item)
-
-        # Include images nested in direct subfolders for a nicer cover.
-        for sub in subdirs:
-            for item in os.listdir(sub):
-                if item.lower().endswith(allowed):
-                    images.append(os.path.join(sub, item))
+        for dirpath, dirnames, filenames in os.walk(full_dir):
+            for fname in filenames:
+                if fname.lower().endswith(allowed):
+                    images.append(os.path.join(dirpath, fname))
 
         if not images:
             return None
 
-        rel = os.path.relpath(full_dir, self.photo_base_dir)
-        chosen = images[random.randrange(len(images))]
-        chosen_rel = os.path.join(rel, chosen) if not os.path.isabs(chosen) else chosen
-        return {'path': chosen_rel}
+        chosen = random.choice(images)
+        return {'path': os.path.relpath(chosen, self.photo_base_dir)}
+
+    @staticmethod
+    def _media_extensions():
+        # Photos + vidéos gérées par la galerie.
+        return ('.jpg', '.jpeg', '.png', '.gif', '.webp',
+                '.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.wmv',
+                '.3gp', '.mpg', '.mpeg')
+
+    def get_folder_has_media(self, folder_rel_path, is_admin=False, user_tag=None):
+        """Return True if the folder (recursively) contains at least one photo
+        or video, False otherwise. Used to avoid displaying empty folders as
+        albums. DB-first (privacy-aware), filesystem scan as fallback."""
+        full_dir, _ = self.resolve_under_base(folder_rel_path)
+        if full_dir is None or not os.path.isdir(full_dir):
+            return False
+
+        exts = self._media_extensions()
+
+        # DB-first: any indexed photo/video anywhere under this folder.
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        clause, params = self._get_privacy_clause(is_admin, user_tag)
+        prefix = folder_rel_path.rstrip(os.sep) + os.sep
+        like_clause = " OR ".join(["i.file_path LIKE ?"] * len(exts))
+        cursor.execute(
+            f"SELECT i.file_path FROM images i WHERE {clause} AND i.file_path LIKE ? AND ({like_clause}) LIMIT 1",
+            params + (prefix + '%',) + tuple(f'%{e}' for e in exts)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return True
+
+        # Fallback: recursive directory scan for any media file.
+        for dirpath, dirnames, filenames in os.walk(full_dir):
+            for fname in filenames:
+                if fname.lower().endswith(exts):
+                    return True
+        return False
+
+    def get_folders_has_media(self, folder_paths, is_admin=False, user_tag=None):
+        """Batch version of get_folder_has_media to avoid one Python process per
+        folder. Returns a dict {folder: bool}."""
+        result = {}
+        for p in folder_paths or []:
+            result[p] = self.get_folder_has_media(p, is_admin, user_tag)
+        return result
 
     def create_album(self, name, description=''):
         name = (name or '').strip()

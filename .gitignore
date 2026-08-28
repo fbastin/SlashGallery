@@ -15,3 +15,10 @@ models/*.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Apache directory protection (403 index.php)
+/index.php
+/backend/index.php
+/models/index.php
+/css/
+/js/
