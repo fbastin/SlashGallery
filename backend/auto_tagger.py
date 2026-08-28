@@ -94,9 +94,9 @@ def load_model(model_dir):
     return model
 
 def auto_tag_image(db, labels_path, model_dir, image_rel_path, threshold=20.0, model=None, labels=None):
-    full_path = os.path.join(db.photo_base_dir, image_rel_path)
-    if not os.path.exists(full_path):
-        return {"success": False, "error": f"File not found: {full_path}"}
+    full_path, _ = db.resolve_under_base(image_rel_path)
+    if full_path is None or not os.path.exists(full_path):
+        return {"success": False, "error": f"File not found or invalid path: {image_rel_path}"}
 
     # Load labels (reuse if passed in)
     if labels is None:
@@ -170,9 +170,9 @@ def auto_tag_image(db, labels_path, model_dir, image_rel_path, threshold=20.0, m
         return {"success": False, "error": str(e)}
 
 def process_album(db, labels_path, model_dir, album_rel_path):
-    full_album_path = os.path.join(db.photo_base_dir, album_rel_path)
-    if not os.path.isdir(full_album_path):
-        return {"success": False, "error": f"Not a directory: {full_album_path}"}
+    full_album_path, _ = db.resolve_under_base(album_rel_path)
+    if full_album_path is None or not os.path.isdir(full_album_path):
+        return {"success": False, "error": f"Not a directory or invalid path: {album_rel_path}"}
 
     labels = load_labels(labels_path)
     if labels is None:

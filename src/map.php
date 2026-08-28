@@ -23,7 +23,7 @@ if ($filterSearch !== '') {
     $results = $photoEngine->search($filterSearch);
     // Search returns full info including lat/lng now
     $geolocated = array_filter($results, function($r) { return $r['lat'] !== null; });
-    $title = "Carte : Recherche '$filterSearch'";
+    $title = "Carte : Recherche '" . htmlspecialchars($filterSearch) . "'";
 } elseif ($filterPath !== '') {
     // We don't have a direct "get geolocated by path" yet, 
     // but we can just filter all geolocated ones

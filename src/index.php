@@ -39,7 +39,7 @@ if ($searchQuery !== '') {
     // Sanitize path to prevent directory traversal
     $fullPath = realpath($realBaseDir . DIRECTORY_SEPARATOR . $requestedPath);
 
-    if ($fullPath === false || strpos($fullPath, $realBaseDir) !== 0) {
+    if ($fullPath === false || ($fullPath !== $realBaseDir && strpos($fullPath, $realBaseDir . DIRECTORY_SEPARATOR) !== 0)) {
         $fullPath = $realBaseDir;
         $relativeDisplayPath = '';
     } else {
@@ -401,7 +401,7 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
             <div style="display: flex; gap: 0.5rem;">
                 <?php if (!$isSearch && $relativeDisplayPath !== ''): ?>
                     <a href="map.php?path=<?php echo urlencode($relativeDisplayPath); ?>" class="btn btn-secondary" style="background: #1976d2; color: #fff;">🗺️ Carte de l'album</a>
-                    <button class="btn" onclick="aiTagAlbum(event, '<?php echo addslashes($relativeDisplayPath); ?>')" style="background: #673ab7; color: #fff;">🪄 Taguer l'album</button>
+                    <button class="btn" onclick="aiTagAlbum(event, '<?php echo htmlspecialchars(addslashes($relativeDisplayPath), ENT_QUOTES, 'UTF-8'); ?>')" style="background: #673ab7; color: #fff;">🪄 Taguer l'album</button>
                 <?php endif; ?>
                 <?php if (!empty($_SESSION['blog_admin'])): ?>
                     <button class="btn btn-secondary" onclick="triggerFineTune(event)" style="background: #388e3c; color: #fff;">🧠 Optimiser l'IA</button>
@@ -450,7 +450,7 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
             ?>
             <div class="gallery-item" data-path="<?php echo htmlspecialchars($img); ?>">
                 <div style="position: relative;">
-                    <input type="checkbox" class="selection-checkbox" <?php echo $isSelected ? 'checked' : ''; ?> onchange="toggleSelection(event, '<?php echo addslashes($img); ?>')">
+                    <input type="checkbox" class="selection-checkbox" <?php echo $isSelected ? 'checked' : ''; ?> onchange="toggleSelection(event, '<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')">
                     <a href="<?php echo htmlspecialchars($imgUrl); ?>" class="image-link" onclick="openLightbox(event, <?php echo $index; ?>)">
                         <?php if ($isVideo): ?>
                             <div class="video-thumb">
@@ -460,21 +460,21 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
                             <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="<?php echo htmlspecialchars($imgName); ?>" loading="lazy">
                         <?php endif; ?>
                     </a>
-                    <button class="btn-ai-mini" title="Taguer par IA" onclick="aiTagImage(event, '<?php echo addslashes($img); ?>')">🪄</button>
-                    <button class="btn-delete-mini" title="Supprimer" onclick="event.preventDefault(); event.stopPropagation(); deleteImage(event, '<?php echo addslashes($img); ?>')">🗑️</button>
-                    <div class="btn-addtag-mini" title="Ajouter une étiquette" onclick="event.preventDefault(); event.stopPropagation(); showTagInput(this, '<?php echo addslashes($img); ?>')">+</div>
-                    <form class="addtag-inline" onsubmit="addTag(event, '<?php echo addslashes($img); ?>')" onclick="event.stopPropagation();" style="display:none;">
+                    <button class="btn-ai-mini" title="Taguer par IA" onclick="aiTagImage(event, '<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')">🪄</button>
+                    <button class="btn-delete-mini" title="Supprimer" onclick="event.preventDefault(); event.stopPropagation(); deleteImage(event, '<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')">🗑️</button>
+                    <div class="btn-addtag-mini" title="Ajouter une étiquette" onclick="event.preventDefault(); event.stopPropagation(); showTagInput(this, '<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')">+</div>
+                    <form class="addtag-inline" onsubmit="addTag(event, '<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')" onclick="event.stopPropagation();" style="display:none;">
                         <input type="text" placeholder="Étiquette..." required>
                     </form>
                     <?php if ($coords['lat'] !== null): ?>
-                        <div class="location-mini" title="Géolocalisée" onclick="event.preventDefault(); event.stopPropagation(); toggleLocationEdit('<?php echo addslashes($img); ?>')">📍</div>
+                        <div class="location-mini" title="Géolocalisée" onclick="event.preventDefault(); event.stopPropagation(); toggleLocationEdit('<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')">📍</div>
                     <?php endif; ?>
                 </div>
 
                 <div class="location-edit" id="loc-edit-<?php echo md5($img); ?>" style="display:none; padding: 4px 6px;">
                     <input type="text" id="lat-<?php echo md5($img); ?>" placeholder="Lat" style="width:45%; font-size:0.7rem;" value="<?php echo $coords['lat']; ?>">
                     <input type="text" id="lng-<?php echo md5($img); ?>" placeholder="Lng" style="width:45%; font-size:0.7rem;" value="<?php echo $coords['lng']; ?>">
-                    <button onclick="saveLocation('<?php echo addslashes($img); ?>')" style="width:100%; margin-top:2px; font-size:0.7rem;">Sauver</button>
+                    <button onclick="saveLocation('<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>')" style="width:100%; margin-top:2px; font-size:0.7rem;">Sauver</button>
                 </div>
 
                 <div class="tags-list">
@@ -483,7 +483,7 @@ $selectionCount = count($_SESSION['photo_selection'] ?? []);
                             <a href="?q=<?php echo urlencode($tag['tag_name']); ?>" style="text-decoration: none; color: inherit;">
                                 <?php echo htmlspecialchars($tag['tag_name']); ?>
                             </a>
-                            <span class="btn-del-tag" onclick="deleteTag(event, '<?php echo addslashes($img); ?>', '<?php echo addslashes($tag['tag_name']); ?>')">&times;</span>
+                            <span class="btn-del-tag" onclick="deleteTag(event, '<?php echo htmlspecialchars(addslashes($img), ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars(addslashes($tag['tag_name']), ENT_QUOTES, 'UTF-8'); ?>')">&times;</span>
                         </div>
                     <?php endforeach; ?>
                 </div>
