@@ -52,6 +52,9 @@ def handle_api():
 
     if action == "get_summarized_timeline":
         print(json.dumps(db.get_summarized_timeline()))
+    elif action == "get_photos_by_date":
+        day = sys.argv[6] if len(sys.argv) > 6 else ""
+        print(json.dumps(db.get_photos_by_date(day, is_admin, user_tag)))
     elif action == "get_geolocated":
         print(json.dumps(db.get_geolocated(is_admin, user_tag)))
     elif action == "get_all_tags":

@@ -50,21 +50,30 @@ class GalleryDB:
         return conn
 
     def _get_privacy_clause(self, is_admin, user_tag):
+        """Renvoie (fragment_sql, parametres).
+
+        Le nom d'utilisateur etait INTERPOLE dans le SQL. Ce n'etait pas theorique :
+        cinq comptes du forum portent une apostrophe ou un antislash dans leur nom, et
+        pour eux la requete etait cassee ou detournee des aujourd'hui. Le fragment est
+        desormais parametre, et l'appelant DOIT propager les parametres dans l'ordre —
+        la clause de confidentialite venant toujours en tete du WHERE.
+        """
         if is_admin:
-            return "1=1"
+            return "1=1", []
         if user_tag:
-            return f"(i.is_public = 1 OR i.id IN (SELECT image_id FROM tags WHERE tag_name = '{user_tag.lower()}'))"
-        return "i.is_public = 1"
+            return ("(i.is_public = 1 OR i.id IN "
+                    "(SELECT image_id FROM tags WHERE tag_name = ?))"), [user_tag.lower()]
+        return "i.is_public = 1", []
 
     def get_geolocated(self, is_admin=False, user_tag=None):
         conn = self.get_conn()
         cursor = conn.cursor()
-        clause = self._get_privacy_clause(is_admin, user_tag)
+        clause, clause_params = self._get_privacy_clause(is_admin, user_tag)
         cursor.execute(f"""
             SELECT i.file_path, i.latitude, i.longitude, i.file_name 
             FROM images i
             WHERE i.latitude IS NOT NULL AND i.longitude IS NOT NULL AND {clause}
-        """)
+        """, clause_params)
         results = []
         for row in cursor.fetchall():
             results.append({
@@ -72,6 +81,37 @@ class GalleryDB:
                 'lat': row['latitude'],
                 'lng': row['longitude'],
                 'name': row['file_name']
+            })
+        conn.close()
+        return results
+
+    def get_photos_by_date(self, day, is_admin=False, user_tag=None):
+        """Photos d'une journee, pour la vue Chronologie.
+
+        Cette methode MANQUAIT : `SlashGallery::getPhotosByDate()` existait cote PHP et
+        appelait une action que `api.py` ne connaissait pas. Le retour etait alors
+        `[false, "Unknown action: get_photos_by_date"]` — que l'appelant, s'il ne se
+        mefiait pas, prenait pour une liste de chemins.
+
+        Meme clause de confidentialite que le reste, et meme regle de date que
+        `get_summarized_timeline` (`date_taken` sinon `date_added`), sans quoi le compte
+        du jour et la liste du jour ne parleraient pas de la meme chose.
+        """
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        clause, clause_params = self._get_privacy_clause(is_admin, user_tag)
+        cursor.execute(f"""
+            SELECT i.file_path, i.file_name
+            FROM images i
+            WHERE date(COALESCE(i.date_taken, i.date_added)) = ? AND {clause}
+            ORDER BY COALESCE(i.date_taken, i.date_added) ASC, i.id ASC
+        """, [day] + list(clause_params))
+        results = []
+        for row in cursor.fetchall():
+            fp = row['file_path']
+            results.append({
+                'path': fp if not os.path.isabs(fp) else os.path.relpath(fp, self.photo_base_dir),
+                'name': row['file_name'],
             })
         conn.close()
         return results
@@ -93,10 +133,10 @@ class GalleryDB:
     def get_all_images(self, is_admin=False, user_tag=None, filter_tag=None):
         conn = self.get_conn()
         cursor = conn.cursor()
-        privacy_clause = self._get_privacy_clause(is_admin, user_tag)
+        privacy_clause, privacy_params = self._get_privacy_clause(is_admin, user_tag)
         
         sql = f"SELECT DISTINCT i.file_path FROM images i LEFT JOIN tags t ON i.id = t.image_id WHERE ({privacy_clause})"
-        params = []
+        params = list(privacy_params)
         
         if filter_tag:
             sql += " AND i.id IN (SELECT image_id FROM tags WHERE tag_name = ?)"
@@ -129,10 +169,10 @@ class GalleryDB:
         conn = self.get_conn()
         cursor = conn.cursor()
         keywords = query_str.split()
-        privacy_clause = self._get_privacy_clause(is_admin, user_tag)
+        privacy_clause, privacy_params = self._get_privacy_clause(is_admin, user_tag)
         
         sql = f"SELECT DISTINCT i.file_path, i.latitude, i.longitude, i.date_taken FROM images i LEFT JOIN tags t ON i.id = t.image_id WHERE ({privacy_clause})"
-        params = []
+        params = list(privacy_params)
         
         if filter_tag:
             sql += " AND i.id IN (SELECT image_id FROM tags WHERE tag_name = ?)"
@@ -183,8 +223,8 @@ class GalleryDB:
     def get_all_tags(self, is_admin=False, user_tag=None):
         conn = self.get_conn()
         cursor = conn.cursor()
-        clause = self._get_privacy_clause(is_admin, user_tag)
-        cursor.execute(f"SELECT tag_name, COUNT(*) as count FROM tags t JOIN images i ON t.image_id = i.id WHERE {clause} GROUP BY tag_name ORDER BY count DESC, tag_name ASC")
+        clause, clause_params = self._get_privacy_clause(is_admin, user_tag)
+        cursor.execute(f"SELECT tag_name, COUNT(*) as count FROM tags t JOIN images i ON t.image_id = i.id WHERE {clause} GROUP BY tag_name ORDER BY count DESC, tag_name ASC", clause_params)
         results = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return results
