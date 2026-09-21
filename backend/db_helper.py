@@ -86,6 +86,24 @@ class GalleryDB:
             return None, None
         return candidate, os.path.relpath(candidate, base)
 
+    def canonical_rel(self, rel_path):
+        """Forme CANONIQUE d'un chemin, telle qu'elle est stockee dans `file_path`.
+
+        POURQUOI. `file_path` est UNIQUE, mais deux ecritures du MEME fichier sont deux
+        chaines differentes : `photos/x.jpg` et `/var/.../gallery/photos/x.jpg` passent
+        toutes deux la contrainte. Constate sur tireur.org : deux photos indexees deux
+        fois, et la seconde ligne sans la licence ni l'etiquette de proprietaire portees
+        par la premiere — la galerie affichait donc la meme image deux fois, dont une
+        sans attribution.
+
+        `resolve_under_base` produisait deja cette forme, mais tous les appelants la
+        JETAIENT (`full_path, _ = …`) pour interroger la base avec l'argument brut.
+
+        Renvoie None si le chemin sort du dossier de base.
+        """
+        _full, rel = self.resolve_under_base(rel_path)
+        return rel
+
     def _get_privacy_clause(self, is_admin, user_tag):
         if is_admin:
             return "1=1", ()
@@ -259,6 +277,9 @@ class GalleryDB:
         return results
 
     def delete_tag(self, rel_path, tag_name):
+        rel_path = self.canonical_rel(rel_path)
+        if rel_path is None:
+            return {"success": False, "error": "Invalid path"}
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
@@ -271,7 +292,7 @@ class GalleryDB:
             conn.close()
 
     def add_tag(self, rel_path, tag_name, source='manual'):
-        full_path, _ = self.resolve_under_base(rel_path)
+        full_path, rel_path = self.resolve_under_base(rel_path)
         if full_path is None:
             return {"success": False, "error": f"Invalid path: {rel_path}"}
         conn = self.get_conn()
@@ -301,6 +322,9 @@ class GalleryDB:
             conn.close()
 
     def set_message_id(self, rel_path, message_id):
+        rel_path = self.canonical_rel(rel_path)
+        if rel_path is None:
+            return {"success": False, "error": "Invalid path"}
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
@@ -327,6 +351,9 @@ class GalleryDB:
             conn.close()
 
     def update_location(self, rel_path, lat, lng):
+        rel_path = self.canonical_rel(rel_path)
+        if rel_path is None:
+            return False
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
@@ -339,6 +366,9 @@ class GalleryDB:
             conn.close()
 
     def set_license(self, rel_path, license_code):
+        rel_path = self.canonical_rel(rel_path)
+        if rel_path is None:
+            return {"success": False, "error": "Invalid path"}
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
@@ -351,6 +381,9 @@ class GalleryDB:
             conn.close()
 
     def set_public(self, rel_path, is_public):
+        rel_path = self.canonical_rel(rel_path)
+        if rel_path is None:
+            return {"success": False, "error": "Invalid path"}
         conn = self.get_conn()
         cursor = conn.cursor()
         try:
@@ -363,7 +396,7 @@ class GalleryDB:
             conn.close()
 
     def delete_image(self, rel_path):
-        full_path, _ = self.resolve_under_base(rel_path)
+        full_path, rel_path = self.resolve_under_base(rel_path)
         if full_path is None:
             return {"success": False, "error": f"Invalid path: {rel_path}"}
         conn = self.get_conn()
@@ -391,7 +424,7 @@ class GalleryDB:
     def _get_or_create_image_id(self, cursor, rel_path):
         """Return the image id for rel_path, creating a DB row (without tags) if
         the file exists on disk. Returns None if the file is missing/invalid."""
-        full_path, _ = self.resolve_under_base(rel_path)
+        full_path, rel_path = self.resolve_under_base(rel_path)
         if full_path is None:
             return None
         cursor.execute("SELECT id FROM images WHERE file_path = ?", (rel_path,))

@@ -144,6 +144,50 @@ class PhotosByDateTests(GalleryDBTestBase):
         self.assertNotIn(self.priv, paths)
 
 
+class PathCanonicalisationTests(GalleryDBTestBase):
+    """`file_path` est UNIQUE, mais deux ECRITURES du meme fichier sont deux chaines
+    differentes : `photos/x.jpg` et `/base/photos/x.jpg` passent toutes deux la
+    contrainte. Constate en production : deux photos indexees deux fois, la seconde
+    ligne sans la licence ni l'etiquette de proprietaire de la premiere — la galerie
+    affichait la meme image deux fois, dont une sans attribution."""
+
+    def _count(self, rel):
+        conn = self.db.get_conn()
+        n = conn.execute("SELECT COUNT(*) FROM images WHERE file_name = ?",
+                         (os.path.basename(rel),)).fetchone()[0]
+        conn.close()
+        return n
+
+    def test_absolute_path_does_not_create_a_second_row(self):
+        avant = self._count(self.pub)
+        self.db.add_tag(os.path.join(self.base, self.pub), 'depuis-un-chemin-absolu')
+        self.assertEqual(self._count(self.pub), avant,
+                         "un chemin absolu a cree une seconde ligne pour le meme fichier")
+
+    def test_tag_added_by_absolute_path_lands_on_the_same_image(self):
+        self.db.add_tag(os.path.join(self.base, self.pub), 'marqueur')
+        meta = self.db.get_batch_metadata([self.pub])
+        noms = [t['tag_name'] for t in meta['tags'].get(self.pub, [])]
+        self.assertIn('marqueur', noms)
+
+    def test_dotted_path_is_canonicalised(self):
+        avant = self._count(self.pub)
+        self.db.add_tag('photos/../photos/pub.jpg', 'chemin-detourne')
+        self.assertEqual(self._count(self.pub), avant)
+
+    def test_set_public_accepts_an_absolute_path(self):
+        """Sans normalisation, l'UPDATE ne touchait AUCUNE ligne et echouait en silence."""
+        self.db.set_public(os.path.join(self.base, self.pub), False)
+        conn = self.db.get_conn()
+        val = conn.execute("SELECT is_public FROM images WHERE file_path = ?",
+                           (self.pub,)).fetchone()[0]
+        conn.close()
+        self.assertEqual(val, 0)
+
+    def test_escaping_the_base_is_refused(self):
+        self.assertIsNone(self.db.canonical_rel('../../etc/passwd'))
+
+
 class SearchTests(GalleryDBTestBase):
     def test_search_matches_tag_and_path(self):
         # Search by tag name
