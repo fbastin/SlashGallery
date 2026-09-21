@@ -116,6 +116,37 @@ class GalleryDB:
         conn.close()
         return results
 
+    def get_photos_by_date(self, day, is_admin=False, user_tag=None):
+        """Photos d'une journee, pour la vue Chronologie.
+
+        Cette methode MANQUAIT : `SlashGallery::getPhotosByDate()` existait cote PHP et
+        appelait une action que `api.py` ne connaissait pas. Le retour etait alors
+        `[false, "Unknown action: get_photos_by_date"]` — un tableau, qu'un appelant
+        qui ne s'en mefie pas parcourt comme une liste de chemins.
+
+        Meme clause de confidentialite que le reste, et meme regle de date que
+        `get_summarized_timeline` (`date_taken` sinon `date_added`), sans quoi le compte
+        du jour et la liste du jour ne parleraient pas de la meme chose.
+        """
+        conn = self.get_conn()
+        cursor = conn.cursor()
+        clause, clause_params = self._get_privacy_clause(is_admin, user_tag)
+        cursor.execute(f"""
+            SELECT i.file_path, i.file_name
+            FROM images i
+            WHERE date(COALESCE(i.date_taken, i.date_added)) = ? AND {clause}
+            ORDER BY COALESCE(i.date_taken, i.date_added) ASC, i.id ASC
+        """, [day] + list(clause_params))
+        results = []
+        for row in cursor.fetchall():
+            fp = row['file_path']
+            results.append({
+                'path': fp if not os.path.isabs(fp) else os.path.relpath(fp, self.photo_base_dir),
+                'name': row['file_name'],
+            })
+        conn.close()
+        return results
+
     def get_summarized_timeline(self):
         conn = self.get_conn()
         cursor = conn.cursor()

@@ -91,6 +91,59 @@ class PathTraversalTests(GalleryDBTestBase):
         self.assertFalse(res['success'])
 
 
+class PhotosByDateTests(GalleryDBTestBase):
+    """`get_photos_by_date` : cette methode manquait, et `api.py` renvoyait alors
+    `[false, "Unknown action: …"]` — un tableau, qu'un appelant parcourt comme une
+    liste de chemins. Ces tests verrouillent ce qui compte : la meme regle de date que
+    `get_summarized_timeline`, et la meme clause de confidentialite que le reste."""
+
+    def _set_dates(self, rel, taken=None, added=None):
+        conn = self.db.get_conn()
+        cur = conn.cursor()
+        cur.execute("UPDATE images SET date_taken = ?, date_added = COALESCE(?, date_added) "
+                    "WHERE file_path = ?", (taken, added, rel))
+        conn.commit()
+        conn.close()
+
+    def test_non_admin_sees_only_public_on_that_day(self):
+        self._set_dates(self.pub, taken='2024-05-01 10:00:00')
+        self._set_dates(self.priv, taken='2024-05-01 11:00:00')
+        paths = [r['path'] for r in self.db.get_photos_by_date('2024-05-01')]
+        self.assertIn(self.pub, paths)
+        self.assertNotIn(self.priv, paths)
+
+    def test_admin_sees_private_too(self):
+        self._set_dates(self.pub, taken='2024-05-01 10:00:00')
+        self._set_dates(self.priv, taken='2024-05-01 11:00:00')
+        paths = [r['path'] for r in self.db.get_photos_by_date('2024-05-01', is_admin=True)]
+        self.assertIn(self.priv, paths)
+
+    def test_falls_back_to_date_added(self):
+        """date_taken NULL : c'est date_added qui fait foi, comme dans la chronologie."""
+        self._set_dates(self.pub, taken=None, added='2024-06-02 08:00:00')
+        paths = [r['path'] for r in self.db.get_photos_by_date('2024-06-02')]
+        self.assertIn(self.pub, paths)
+
+    def test_other_days_are_excluded(self):
+        self._set_dates(self.pub, taken='2024-05-01 10:00:00')
+        self.assertEqual(self.db.get_photos_by_date('2024-05-02'), [])
+
+    def test_agrees_with_summarized_timeline(self):
+        """Le compte du jour et la liste du jour doivent parler de la meme chose."""
+        self._set_dates(self.pub, taken='2024-07-03 09:00:00')
+        self._set_dates(self.priv, taken='2024-07-03 09:30:00')
+        compte = {e['day']: e['count'] for e in self.db.get_summarized_timeline()}
+        liste = self.db.get_photos_by_date('2024-07-03')
+        self.assertEqual(compte.get('2024-07-03'), len(liste))
+
+    def test_sql_injection_in_user_tag_is_safe(self):
+        self._set_dates(self.pub, taken='2024-05-01 10:00:00')
+        self._set_dates(self.priv, taken='2024-05-01 11:00:00')
+        paths = [r['path'] for r in
+                 self.db.get_photos_by_date("2024-05-01", user_tag="x' OR '1'='1")]
+        self.assertNotIn(self.priv, paths)
+
+
 class SearchTests(GalleryDBTestBase):
     def test_search_matches_tag_and_path(self):
         # Search by tag name
