@@ -124,6 +124,24 @@ def handle_api():
             print(json.dumps({"success": False, "error": "Admin required"}))
             return
         print(json.dumps(db.set_license(path, license_code)))
+    elif action == "update_location":
+        # Position publiee sur la carte de la galerie ; « null » la retire. Appelee
+        # par SlashGallery::updateLocation(), qui existait sans action correspondante :
+        # l'appel rendait « Unknown action » sans rien ecrire.
+        path = sys.argv[6]
+        if not is_admin:
+            print(json.dumps({"success": False, "error": "Admin required"}))
+            return
+        try:
+            lat = None if sys.argv[7] == 'null' else float(sys.argv[7])
+            lng = None if sys.argv[8] == 'null' else float(sys.argv[8])
+        except (IndexError, ValueError):
+            print(json.dumps({"success": False, "error": "Invalid coordinates"}))
+            return
+        if (lat is None) != (lng is None) or (lat is not None and (abs(lat) > 90 or abs(lng) > 180)):
+            print(json.dumps({"success": False, "error": "Invalid coordinates"}))
+            return
+        print(json.dumps({"success": db.update_location(path, lat, lng)}))
     elif action == "delete_image":
         if not is_admin:
             print(json.dumps({"success": False, "error": "Admin required"}))

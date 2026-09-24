@@ -188,6 +188,36 @@ class PathCanonicalisationTests(GalleryDBTestBase):
         self.assertIsNone(self.db.canonical_rel('../../etc/passwd'))
 
 
+class LocationTests(GalleryDBTestBase):
+    """La position publiee sur la carte se pose, se retire, et reste soumise a la
+    confidentialite. Ajoute le 2026-09-23 avec l'action `update_location` de l'API."""
+
+    def _coords(self, rel):
+        conn = self.db.get_conn()
+        row = conn.execute("SELECT latitude, longitude FROM images WHERE file_path = ?",
+                           (rel,)).fetchone()
+        conn.close()
+        return tuple(row)
+
+    def test_set_then_clear(self):
+        self.assertTrue(self.db.update_location(self.pub, 50.5, 4.4))
+        self.assertEqual(self._coords(self.pub), (50.5, 4.4))
+        self.assertTrue(self.db.update_location(self.pub, None, None))
+        self.assertEqual(self._coords(self.pub), (None, None))
+
+    def test_absolute_path_lands_on_the_same_row(self):
+        self.db.update_location(os.path.join(self.base, self.pub), 1.0, 2.0)
+        self.assertEqual(self._coords(self.pub), (1.0, 2.0))
+
+    def test_private_position_hidden_from_visitors(self):
+        self.db.update_location(self.priv, 3.0, 4.0)
+        chemins = [p['path'] for p in self.db.get_geolocated(is_admin=False)]
+        self.assertNotIn(self.priv, chemins)
+
+    def test_traversal_is_refused(self):
+        self.assertFalse(self.db.update_location('../../etc/passwd', 1.0, 2.0))
+
+
 class SearchTests(GalleryDBTestBase):
     def test_search_matches_tag_and_path(self):
         # Search by tag name
