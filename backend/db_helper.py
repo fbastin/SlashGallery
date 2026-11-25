@@ -395,6 +395,15 @@ class GalleryDB:
         finally:
             conn.close()
 
+    def _thumbnail_paths(self, rel_path):
+        """Thumbnails an image may have: the .webp that generate_thumbnail() writes, and
+        the older one kept under the image's own extension. Looking only for the latter
+        left every .webp thumbnail behind once its image was deleted. `rel_path` is the
+        canonical path from resolve_under_base(), so both stay inside thumbs/."""
+        thumb_dir = os.path.join(self.photo_base_dir, 'thumbs')
+        return [os.path.join(thumb_dir, os.path.splitext(rel_path)[0] + '.webp'),
+                os.path.join(thumb_dir, rel_path)]
+
     def delete_image(self, rel_path):
         full_path, rel_path = self.resolve_under_base(rel_path)
         if full_path is None:
@@ -412,9 +421,9 @@ class GalleryDB:
                 conn.commit()
                 if not msg_id and os.path.exists(full_path):
                     os.remove(full_path)
-                    thumb = os.path.join(self.photo_base_dir, 'thumbs', rel_path)
-                    if os.path.exists(thumb):
-                        os.remove(thumb)
+                    for thumb in self._thumbnail_paths(rel_path):
+                        if os.path.exists(thumb):
+                            os.remove(thumb)
             return {"success": True, "file_deleted": not bool(row and row['phorum_message_id'])}
         except Exception as e:
             return {"success": False, "error": str(e)}

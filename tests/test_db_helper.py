@@ -324,5 +324,43 @@ class AlbumTests(GalleryDBTestBase):
         self.assertFalse(res['success'])
 
 
+class DeleteImageThumbnailTests(GalleryDBTestBase):
+    """delete_image() removes the thumbnails it is responsible for, and only those."""
+
+    def _thumb(self, rel):
+        path = os.path.join(self.base, 'thumbs', rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write('t')
+        return path
+
+    def test_webp_thumbnail_is_removed_with_the_image(self):
+        webp = self._thumb('photos/pub.webp')
+        res = self.db.delete_image(self.pub)
+        self.assertTrue(res['file_deleted'])
+        self.assertFalse(os.path.exists(os.path.join(self.base, self.pub)))
+        self.assertFalse(os.path.exists(webp))
+
+    def test_legacy_thumbnail_is_removed_too(self):
+        legacy = self._thumb('photos/pub.jpg')
+        self.db.delete_image(self.pub)
+        self.assertFalse(os.path.exists(legacy))
+
+    def test_other_thumbnails_are_left_alone(self):
+        mine = self._thumb('photos/pub.webp')
+        other = self._thumb('photos/priv.webp')
+        self.db.delete_image(self.pub)
+        self.assertFalse(os.path.exists(mine))
+        self.assertTrue(os.path.exists(other))
+
+    def test_image_linked_to_a_message_keeps_file_and_thumbnail(self):
+        webp = self._thumb('photos/priv.webp')
+        self.db.set_message_id(self.priv, 42)
+        res = self.db.delete_image(self.priv)
+        self.assertFalse(res['file_deleted'])
+        self.assertTrue(os.path.exists(os.path.join(self.base, self.priv)))
+        self.assertTrue(os.path.exists(webp))
+
+
 if __name__ == '__main__':
     unittest.main()
